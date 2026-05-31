@@ -1,3 +1,11 @@
+---
+# ESPHome configuration for an Adlar Aurora III / SolarEast R290 heat pump
+# through the JÅN module RS485 Modbus RTU port.
+#
+# Public safety note:
+# Start with read-only monitoring, verify stable Modbus traffic, and only then
+# enable write controls in Home Assistant.
+
 substitutions:
   name: adlar-aurora3
   friendly_name: Adlar Aurora III
@@ -9,6 +17,13 @@ esphome:
   name: ${name}
   friendly_name: ${friendly_name}
   comment: "Adlar Aurora III / SolarEast R290 via JÅN-module RS485 Modbus RTU op Seeed Studio XIAO ESP32C6"
+  project:
+    name: grotegehaktbal.adlar_aurora3_esphome
+    version: "0.1.0"
+
+dashboard_import:
+  package_import_url: github://GroteGehaktBal/adlar-aurora3-esphome/adlar_aurora3_xiao_esp32c6.yaml@main
+  import_full_config: true
 
 esp32:
   board: seeed_xiao_esp32c6

@@ -1,0 +1,51 @@
+name: Hardware test report
+description: Share whether this works on your Adlar/SolarEast/R290 installation.
+title: "[Hardware test]: "
+labels: ["hardware-test"]
+body:
+  - type: input
+    id: heat-pump
+    attributes:
+      label: Heat pump model
+      placeholder: "Adlar Aurora III R290"
+    validations:
+      required: true
+  - type: input
+    id: jan-module
+    attributes:
+      label: JÅN module details
+      placeholder: "Label/version/firmware if known"
+  - type: input
+    id: esp-board
+    attributes:
+      label: ESP board
+      placeholder: "Seeed Studio XIAO ESP32C6"
+  - type: input
+    id: rs485-module
+    attributes:
+      label: RS485 module
+      placeholder: "3.3V automatic direction / manual DE-RE / other"
+  - type: dropdown
+    id: read-data
+    attributes:
+      label: Read data works?
+      options:
+        - "Yes"
+        - "Partly"
+        - "No"
+  - type: dropdown
+    id: write-controls
+    attributes:
+      label: Write controls tested?
+      options:
+        - "No, read-only test"
+        - "Heating setpoint only"
+        - "Mode/on-off/power mode"
+        - "Other"
+  - type: textarea
+    id: observations
+    attributes:
+      label: Observations
+      description: Mention correct registers, wrong scaling, timeouts, CRC errors or bus-collision symptoms.
+    validations:
+      required: true

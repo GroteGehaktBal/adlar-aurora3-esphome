@@ -1,0 +1,10 @@
+.DS_Store
+
+# ESPHome local secrets and generated firmware/build output.
+secrets.yaml
+.esphome/
+build/
+*.bin
+*.elf
+*.factory.bin
+*.map

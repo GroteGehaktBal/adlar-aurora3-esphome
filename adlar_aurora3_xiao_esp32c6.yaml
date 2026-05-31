@@ -1,0 +1,821 @@
+substitutions:
+  name: adlar-aurora3
+  friendly_name: Adlar Aurora III
+  modbus_slave_id: "1"
+  modbus_update_interval: 30s
+  modbus_command_throttle: 250ms
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+  comment: "Adlar Aurora III / SolarEast R290 via JÅN-module RS485 Modbus RTU op Seeed Studio XIAO ESP32C6"
+
+esp32:
+  board: seeed_xiao_esp32c6
+  variant: esp32c6
+  framework:
+    type: esp-idf
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  min_auth_mode: WPA2
+  ap:
+    ssid: "${friendly_name} fallback"
+    password: !secret fallback_ap_password
+
+captive_portal:
+
+api:
+  encryption:
+    key: !secret api_encryption_key
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+logger:
+  level: INFO
+  baud_rate: 0
+
+web_server:
+  port: 80
+  version: 3
+  sorting_groups:
+    - id: group_status
+      name: Status
+      sorting_weight: 10
+    - id: group_temperatures
+      name: Temperaturen
+      sorting_weight: 20
+    - id: group_power
+      name: Vermogen
+      sorting_weight: 30
+    - id: group_controls
+      name: Besturing
+      sorting_weight: 40
+    - id: group_diagnostics
+      name: Diagnostiek
+      sorting_weight: 90
+
+button:
+  - platform: restart
+    name: "ESP herstarten"
+    entity_category: diagnostic
+
+uart:
+  id: uart_rs485
+  tx_pin: D6
+  rx_pin: D7
+  baud_rate: 9600
+  data_bits: 8
+  parity: NONE
+  stop_bits: 1
+
+modbus:
+  id: modbus_rs485
+  uart_id: uart_rs485
+  # Verwijder deze regel bij een RS485-module met automatische richting.
+  flow_control_pin: D2
+  send_wait_time: 250ms
+
+modbus_controller:
+  - id: aurora3
+    modbus_id: modbus_rs485
+    address: ${modbus_slave_id}
+    command_throttle: ${modbus_command_throttle}
+    setup_priority: -10
+    update_interval: ${modbus_update_interval}
+
+binary_sensor:
+  - platform: status
+    name: "ESP online"
+    entity_category: diagnostic
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    name: "Warmtepomp defrost"
+    register_type: holding
+    address: 0x0000
+    bitmask: 0x0100
+    device_class: running
+    web_server:
+      sorting_group_id: group_status
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    name: "Warmtepomp storing waarschuwing"
+    register_type: holding
+    address: 0x0000
+    bitmask: 0x0008
+    device_class: problem
+    web_server:
+      sorting_group_id: group_status
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    name: "Warmtepomp draait"
+    register_type: holding
+    address: 0x0000
+    bitmask: 0x4000
+    device_class: running
+    web_server:
+      sorting_group_id: group_status
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    name: "Warmtepomp wacht op start"
+    register_type: holding
+    address: 0x0000
+    bitmask: 0x8000
+    device_class: running
+    web_server:
+      sorting_group_id: group_status
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    name: "Controller aan"
+    register_type: holding
+    address: 0x0001
+    bitmask: 0x0400
+    device_class: power
+    web_server:
+      sorting_group_id: group_status
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    name: "Compressor actief"
+    register_type: holding
+    address: 0x001A
+    bitmask: 0x0001
+    device_class: running
+    web_server:
+      sorting_group_id: group_status
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    name: "Circulatiepomp actief"
+    register_type: holding
+    address: 0x0019
+    bitmask: 0x0040
+    device_class: running
+    web_server:
+      sorting_group_id: group_status
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    name: "Water flow switch"
+    register_type: holding
+    address: 0x001D
+    bitmask: 0x0100
+    device_class: running
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+
+sensor:
+  - platform: wifi_signal
+    name: "ESP wifi signaal"
+    update_interval: 60s
+    entity_category: diagnostic
+
+  - platform: uptime
+    name: "ESP uptime"
+    update_interval: 60s
+    entity_category: diagnostic
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    id: running_status_1
+    name: "Running status 1 raw"
+    register_type: holding
+    address: 0x0000
+    value_type: U_WORD
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    id: running_status_2
+    name: "Running status 2 raw"
+    register_type: holding
+    address: 0x0001
+    value_type: U_WORD
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    id: fault_state_1
+    name: "Fault state 1 raw"
+    register_type: holding
+    address: 0x0002
+    value_type: U_WORD
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    id: fault_state_2
+    name: "Fault state 2 raw"
+    register_type: holding
+    address: 0x0003
+    value_type: U_WORD
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    id: fault_state_3
+    name: "Fault state 3 raw"
+    register_type: holding
+    address: 0x0004
+    value_type: U_WORD
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    name: "Compressor doel frequentie"
+    register_type: holding
+    address: 0x0027
+    value_type: S_WORD
+    unit_of_measurement: "Hz"
+    device_class: frequency
+    state_class: measurement
+    accuracy_decimals: 0
+    web_server:
+      sorting_group_id: group_status
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    name: "Compressor frequentie"
+    register_type: holding
+    address: 0x0040
+    value_type: S_WORD
+    unit_of_measurement: "Hz"
+    device_class: frequency
+    state_class: measurement
+    accuracy_decimals: 0
+    web_server:
+      sorting_group_id: group_status
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    name: "Ventilator snelheid"
+    register_type: holding
+    address: 0x0041
+    value_type: S_WORD
+    unit_of_measurement: "rpm"
+    state_class: measurement
+    accuracy_decimals: 0
+    web_server:
+      sorting_group_id: group_status
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    name: "EEV stappen"
+    register_type: holding
+    address: 0x0042
+    value_type: S_WORD
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    name: "AC ingangsspanning"
+    register_type: holding
+    address: 0x0044
+    value_type: S_WORD
+    unit_of_measurement: "V"
+    device_class: voltage
+    state_class: measurement
+    accuracy_decimals: 0
+    web_server:
+      sorting_group_id: group_power
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    name: "AC ingangsstroom"
+    register_type: holding
+    address: 0x0045
+    value_type: S_WORD
+    unit_of_measurement: "A"
+    device_class: current
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+    web_server:
+      sorting_group_id: group_power
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    name: "Compressor fase stroom"
+    register_type: holding
+    address: 0x0046
+    value_type: S_WORD
+    unit_of_measurement: "A"
+    device_class: current
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+    web_server:
+      sorting_group_id: group_power
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    name: "Compressor IPM temperatuur"
+    register_type: holding
+    address: 0x0047
+    value_type: S_WORD
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 0
+    web_server:
+      sorting_group_id: group_temperatures
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    name: "Hogedruk verzadigingstemperatuur"
+    register_type: holding
+    address: 0x0048
+    value_type: S_WORD
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    name: "Lagedruk verzadigingstemperatuur"
+    register_type: holding
+    address: 0x0049
+    value_type: S_WORD
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    id: buiten_temp_t1
+    name: "Buitentemperatuur T1"
+    register_type: holding
+    address: 0x004A
+    value_type: S_WORD
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 0
+    web_server:
+      sorting_group_id: group_temperatures
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    name: "Buitenwisselaar temperatuur T2"
+    register_type: holding
+    address: 0x004B
+    value_type: S_WORD
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 0
+    web_server:
+      sorting_group_id: group_temperatures
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    name: "Binnenwisselaar temperatuur T3"
+    register_type: holding
+    address: 0x004C
+    value_type: S_WORD
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 0
+    web_server:
+      sorting_group_id: group_temperatures
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    name: "Zuiggas temperatuur T4"
+    register_type: holding
+    address: 0x004D
+    value_type: S_WORD
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    name: "Persgas temperatuur T5"
+    register_type: holding
+    address: 0x004E
+    value_type: S_WORD
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    id: retour_water_t6
+    name: "Retour water temperatuur T6"
+    register_type: holding
+    address: 0x004F
+    value_type: S_WORD
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 0
+    web_server:
+      sorting_group_id: group_temperatures
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    id: aanvoer_water_t7
+    name: "Aanvoer water temperatuur T7"
+    register_type: holding
+    address: 0x0050
+    value_type: S_WORD
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 0
+    web_server:
+      sorting_group_id: group_temperatures
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    name: "Boiler temperatuur"
+    register_type: holding
+    address: 0x0054
+    value_type: S_WORD
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 0
+    disabled_by_default: true
+    web_server:
+      sorting_group_id: group_temperatures
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    name: "Pomp PWM waarde"
+    register_type: holding
+    address: 0x0057
+    value_type: S_WORD
+    state_class: measurement
+    accuracy_decimals: 0
+    web_server:
+      sorting_group_id: group_status
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    id: water_flow
+    name: "Water flow"
+    register_type: holding
+    address: 0x0058
+    value_type: S_WORD
+    unit_of_measurement: "L/min"
+    state_class: measurement
+    accuracy_decimals: 1
+    web_server:
+      sorting_group_id: group_status
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    name: "Ingangsvermogen"
+    register_type: holding
+    address: 0x005C
+    value_type: S_WORD
+    unit_of_measurement: "kW"
+    device_class: power
+    state_class: measurement
+    accuracy_decimals: 2
+    disabled_by_default: true
+    filters:
+      - multiply: 0.01
+    web_server:
+      sorting_group_id: group_power
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    name: "Totaal elektriciteitsverbruik warmtepomp"
+    register_type: holding
+    address: 0x005D
+    value_type: U_WORD
+    unit_of_measurement: "kWh"
+    device_class: energy
+    state_class: total_increasing
+    accuracy_decimals: 0
+    disabled_by_default: true
+    web_server:
+      sorting_group_id: group_power
+
+  - platform: template
+    id: delta_t
+    name: "Delta T water"
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    update_interval: ${modbus_update_interval}
+    lambda: |-
+      if (isnan(id(aanvoer_water_t7).state) || isnan(id(retour_water_t6).state)) {
+        return NAN;
+      }
+      return id(aanvoer_water_t7).state - id(retour_water_t6).state;
+    web_server:
+      sorting_group_id: group_temperatures
+
+  - platform: template
+    name: "Thermisch vermogen geschat"
+    unit_of_measurement: "kW"
+    device_class: power
+    state_class: measurement
+    accuracy_decimals: 2
+    update_interval: ${modbus_update_interval}
+    lambda: |-
+      if (isnan(id(water_flow).state) || isnan(id(delta_t).state)) {
+        return NAN;
+      }
+      return id(water_flow).state * id(delta_t).state * 4.186f / 60.0f;
+    web_server:
+      sorting_group_id: group_power
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    name: "Koelen settemperatuur register"
+    register_type: holding
+    address: 0x0300
+    value_type: S_WORD
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    name: "Verwarmen settemperatuur register"
+    register_type: holding
+    address: 0x0301
+    value_type: S_WORD
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    name: "Binnen settemperatuur register"
+    register_type: holding
+    address: 0x0306
+    value_type: S_WORD
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+
+number:
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    name: "Verwarmen watertemperatuur setpoint"
+    address: 0x0301
+    value_type: S_WORD
+    min_value: 20
+    max_value: 45
+    step: 1
+    mode: box
+    unit_of_measurement: "°C"
+    device_class: temperature
+    use_write_multiple: false
+    web_server:
+      sorting_group_id: group_controls
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    name: "Koelen watertemperatuur setpoint"
+    address: 0x0300
+    value_type: S_WORD
+    min_value: 7
+    max_value: 25
+    step: 1
+    mode: box
+    unit_of_measurement: "°C"
+    device_class: temperature
+    use_write_multiple: false
+    disabled_by_default: true
+    web_server:
+      sorting_group_id: group_controls
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    name: "Binnen setpoint"
+    address: 0x0306
+    value_type: S_WORD
+    min_value: 10
+    max_value: 25
+    step: 0.5
+    mode: box
+    unit_of_measurement: "°C"
+    device_class: temperature
+    use_write_multiple: false
+    disabled_by_default: true
+    web_server:
+      sorting_group_id: group_controls
+
+select:
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    name: "Bedrijfsmodus"
+    address: 0x0304
+    value_type: S_WORD
+    use_write_multiple: false
+    optionsmap:
+      "Koelen": 0
+      "Verwarmen": 1
+      "Warm water": 2
+      "Vloerverwarming": 3
+      "Warm water + koelen": 4
+      "Warm water + verwarmen": 5
+      "Reserve": 6
+      "Warm water + vloerverwarming": 7
+    web_server:
+      sorting_group_id: group_controls
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    name: "Warmtepomp aan uit"
+    address: 0x0305
+    value_type: S_WORD
+    use_write_multiple: false
+    optionsmap:
+      "Uit": 0
+      "Aan": 1
+    web_server:
+      sorting_group_id: group_controls
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    name: "Vermogensmodus"
+    address: 0x0307
+    value_type: S_WORD
+    use_write_multiple: false
+    optionsmap:
+      "Standaard": 0
+      "High power": 1
+      "Stil": 2
+    web_server:
+      sorting_group_id: group_controls
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    name: "Stooklijn verwarmen"
+    address: 0x0314
+    value_type: S_WORD
+    use_write_multiple: false
+    disabled_by_default: true
+    optionsmap:
+      "Uit": 0
+      "H1": 1
+      "H2": 2
+      "H3": 3
+      "H4": 4
+      "H5": 5
+      "H6": 6
+      "H7": 7
+      "H8": 8
+      "L1": 11
+      "L2": 12
+      "L3": 13
+      "L4": 14
+      "L5": 15
+      "L6": 16
+      "L7": 17
+      "L8": 18
+    web_server:
+      sorting_group_id: group_controls
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    name: "Stooklijn koelen"
+    address: 0x0313
+    value_type: S_WORD
+    use_write_multiple: false
+    disabled_by_default: true
+    optionsmap:
+      "Uit": 0
+      "H1": 1
+      "H2": 2
+      "H3": 3
+      "H4": 4
+      "H5": 5
+      "H6": 6
+      "H7": 7
+      "H8": 8
+      "L1": 11
+      "L2": 12
+      "L3": 13
+      "L4": 14
+      "L5": 15
+      "L6": 16
+      "L7": 17
+      "L8": 18
+    web_server:
+      sorting_group_id: group_controls
+
+text_sensor:
+  - platform: wifi_info
+    ip_address:
+      name: "ESP IP"
+      entity_category: diagnostic
+    ssid:
+      name: "ESP wifi SSID"
+      entity_category: diagnostic
+
+  - platform: template
+    name: "Warmtepomp status tekst"
+    update_interval: ${modbus_update_interval}
+    lambda: |-
+      if (isnan(id(running_status_1).state)) {
+        return std::string("Geen Modbus data");
+      }
+      const uint16_t s1 = (uint16_t) id(running_status_1).state;
+      if (s1 & 0x0008) return std::string("Storing/waarschuwing");
+      if (s1 & 0x0100) return std::string("Defrost");
+      if (s1 & 0x4000) return std::string("Draait");
+      if (s1 & 0x8000) return std::string("Wacht op start");
+      if (s1 & 0x1000) return std::string("Constante temperatuur stop");
+      return std::string("Stand-by");
+    web_server:
+      sorting_group_id: group_status
+
+  - platform: template
+    name: "Warmtepomp fout samenvatting"
+    update_interval: ${modbus_update_interval}
+    lambda: |-
+      if (isnan(id(fault_state_1).state) || isnan(id(fault_state_2).state) || isnan(id(fault_state_3).state)) {
+        return std::string("Geen Modbus data");
+      }
+
+      const uint16_t f1 = (uint16_t) id(fault_state_1).state;
+      const uint16_t f2 = (uint16_t) id(fault_state_2).state;
+      const uint16_t f3 = (uint16_t) id(fault_state_3).state;
+      std::string out;
+
+      auto add = [&out](const char *msg) {
+        if (!out.empty()) out += "; ";
+        out += msg;
+      };
+
+      if (f1 & 0x0004) add("Water flow fout");
+      if (f1 & 0x0008) add("Communicatiefout");
+      if (f1 & 0x0080) add("Water inlaat sensor fout");
+      if (f1 & 0x2000) add("Water uitlaat sensor fout");
+      if (f1 & 0x8000) add("Te groot delta T verschil");
+      if (f2 & 0x8000) add("Lage waterflow beveiliging");
+      if (f3 & 0x0100) add("Buffertank sensor fout");
+      if (f3 & 0x0200) add("Hoofd aanvoerwater sensor fout");
+
+      return out.empty() ? std::string("Geen foutbits actief") : out;
+    web_server:
+      sorting_group_id: group_status

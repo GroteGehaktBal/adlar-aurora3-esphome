@@ -34,6 +34,8 @@ Target hardware for this configuration:
 
 Do not feed a 5V TTL signal directly into the XIAO ESP32C6. Its GPIO pins are not 5V tolerant.
 
+The JÅN RS485 `A/B` terminals may measure around 5V because they are the differential bus side. That does not mean the ESP UART `TXD/RXD` side should use 5V. Prefer a 3.3V-safe RS485 transceiver for direct ESP wiring, or level-shift the transceiver `TXD/RO` output before feeding it into ESP `RX`.
+
 ## Quick Start
 
 1. Clone this repository or import the YAML into ESPHome.

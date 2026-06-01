@@ -72,6 +72,22 @@ Do not short RS485 `A` to `B` for a one-board loopback test. On many half-duplex
 
 If this link test works, the XIAO and RS485 transceiver are basically functional. If it still cannot communicate with the JÅN module, focus on bus ownership, JÅN terminal wiring, A/B naming, termination/biasing, or whether the JÅN port is only active in a specific operating mode. If this link test fails, replace the RS485 transceiver with a known 3.3V-safe module such as an SP3485/MAX3485-based board or use a proven industrial RS485 gateway.
 
+## RS485 Bus Voltage Versus ESP Logic Voltage
+
+Measuring around 5V on JÅN `A/B` does not mean the ESP board or TTL UART side should be powered from 5V. RS485 has two separate sides:
+
+- `A/B`: differential bus side. This can sit around a 5V idle or bias voltage and still be normal.
+- `TXD/RXD`: local TTL side between the transceiver and ESP. This must stay within the ESP GPIO voltage range.
+
+For ESP32-C6 boards, treat GPIO pins as 3.3V logic. A dev board may expose a `5V` pin for powering external modules, but its GPIO pins are still not 5V tolerant.
+
+If a 5V MAX485-style module is used anyway, protect the ESP RX pin. A safe pattern is:
+
+- ESP `TX` at 3.3V can usually drive module `RXD/DI` high enough for a 5V transceiver.
+- Module `TXD/RO` back into ESP `RX` must be level shifted or divided down if it rises near 5V.
+
+Do not connect a module powered from 5V directly to ESP `RX` until module `TXD` has been measured while disconnected from the ESP.
+
 ## Confirming The Flashed Firmware
 
 The local ESPHome web UI is served by the ESP itself. Entity names therefore tell you which firmware is actually running.

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.1 - 2026-06-01
+
+- Clarified the difference between RS485 `A/B` bus voltage and ESP-side `TXD/RXD` logic voltage.
+- Added safe notes for testing or powering 5V MAX485-style modules with ESP32-C6 boards.
+
 ## 0.6.0 - 2026-06-01
 
 - Added an RS485 link-test firmware that sends `ADLAR485` every 5 seconds through the transceiver at 9600 8N2.

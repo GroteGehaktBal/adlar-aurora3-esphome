@@ -57,6 +57,9 @@ For a permanent parallel tap, avoid two loose bare wires under one screw. Use fe
 
 - Power the XY-485 board from `3V3` so its TTL side is compatible with the XIAO ESP32C6.
 - Do not feed a 5V TTL output into the XIAO RX pin.
+- A 5V reading on the JÅN `A/B` RS485 terminals does not mean the ESP UART side should use 5V. RS485 `A/B` is the differential bus side; `TXD/RXD` is the local TTL logic side.
+- A 3.3V RS485 transceiver can still communicate with a 5V-biased RS485 bus when it is RS485 compliant. The 3.3V rating mainly keeps the local `TXD/RXD` logic safe for the ESP.
+- If you choose to power a 5V MAX485-style module from 5V, first disconnect module `TXD` from the ESP and measure `TXD` to `GND`. If it can rise near 5V, use a level shifter or resistor divider before connecting it to the ESP RX pin.
 - Wire with power off.
 - Keep the cable short for first tests.
 - For longer cable runs, use twisted pair for `A/B` and consider proper RS485 termination and biasing.

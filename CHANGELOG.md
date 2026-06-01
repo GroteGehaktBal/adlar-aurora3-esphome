@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.0 - 2026-06-01
+
+- Added an RS485 link-test firmware that sends `ADLAR485` every 5 seconds through the transceiver at 9600 8N2.
+- Documented why a one-board RS485 `A`-to-`B` short is not a valid loopback test.
+- Added guidance for testing against a USB-RS485 adapter or second RS485 transceiver.
+
 ## 0.5.0 - 2026-06-01
 
 - Added a local XIAO D6/D7 UART loopback firmware for proving the ESPHome UART pins independently from the RS485 transceiver and JÅN bus.

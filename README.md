@@ -70,6 +70,14 @@ Use this to confirm whether the XIAO and RS485 module can hear the existing JÅN
 
 If the sniffer logs no RX bytes, flash `adlar_aurora3_xiao_esp32c6_uart_loopback.yaml`. Disconnect the RS485 module, temporarily short XIAO `D6` to XIAO `D7`, and watch the logs. Matching `[uart_debug]` TX and RX lines prove the ESPHome UART pins are working before replacing or retesting the RS485 transceiver.
 
+If XIAO `D6` and `D7` are hard to reach, you can leave the RS485 module connected to the XIAO and temporarily short the module TTL-side `TXD` and `RXD` pins instead. Keep the module disconnected from the JÅN `A/B/GND` terminals while doing this. This tests the ESP UART pins and wiring to the module, but it does not test the RS485 differential transceiver.
+
+## RS485 Link Test
+
+If you have a known-good USB-RS485 adapter or a second RS485 transceiver, flash `adlar_aurora3_xiao_esp32c6_rs485_link_test.yaml`. Keep the RS485 module connected to the XIAO, disconnect it from the JÅN module, and connect RS485 `A/B/GND` to the known-good adapter/transceiver. The firmware sends `ADLAR485` every 5 seconds at 9600 8N2 and logs both TX and RX bytes.
+
+Do not short RS485 `A` to `B` as a loopback test. A real RS485 transceiver test needs a second receiver/transceiver on the bus.
+
 ## Wiring Summary
 
 | XIAO ESP32C6 | GPIO | XY-485 / automatic-direction RS485 module |
@@ -107,6 +115,7 @@ See [docs/troubleshooting.md](docs/troubleshooting.md) for symptoms such as CRC 
 | `adlar_aurora3_xiao_esp32c6_bringup.yaml` | Minimal one-register-per-minute first-contact firmware |
 | `adlar_aurora3_xiao_esp32c6_sniffer.yaml` | Passive RS485 receive-only sniffer firmware |
 | `adlar_aurora3_xiao_esp32c6_uart_loopback.yaml` | Local XIAO D6/D7 UART loopback test firmware |
+| `adlar_aurora3_xiao_esp32c6_rs485_link_test.yaml` | RS485 transceiver test firmware for a USB-RS485 adapter or second transceiver |
 | `secrets.example.yaml` | Example secrets file |
 | `docs/wiring.md` | Wiring and RS485 notes |
 | `docs/register-map.md` | Register overview, scaling and writable addresses |

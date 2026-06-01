@@ -45,6 +45,8 @@ If the sniffer profile shows no `[uart_debug]` RX lines in either A/B orientatio
 4. Flash `adlar_aurora3_xiao_esp32c6_uart_loopback.yaml`.
 5. Watch ESPHome logs for matching `[uart_debug]` TX and RX byte lines every 5 seconds.
 
+If XIAO `D6` and `D7` are hard to reach, leave the RS485 module connected to the XIAO and temporarily short the module TTL-side `TXD` and `RXD` pins instead. Keep RS485 `A/B/GND` disconnected from the JÅN module during this test. This is easier to do at the RS485 module connector, but it only proves the ESP UART pins and TTL wiring. It does not prove that the RS485 differential side can talk to the heat pump.
+
 If loopback works, the XIAO pins and ESPHome UART configuration are good. Focus next on the RS485 transceiver module or the JÅN bus connection. If loopback does not work, check that the board really exposes XIAO `D6` as GPIO16 and `D7` as GPIO17, and inspect solder joints on those pins.
 
 With the sniffer firmware powered and the RS485 module connected, useful idle voltage checks are:
@@ -52,6 +54,23 @@ With the sniffer firmware powered and the RS485 module connected, useful idle vo
 - XIAO `D6` / module `RXD` to GND: should sit near `3.3V`.
 - Module `TXD` / XIAO `D7` to GND: should usually sit near `3.3V` when the RS485 receiver is idle.
 - JÅN `GND`, module `DNG/GND`, and XIAO `GND`: should be continuous.
+
+## RS485 Transceiver Link Test
+
+If you have a known-good USB-RS485 adapter or a second RS485 module, test through the RS485 differential side. This does not use the heat pump or JÅN module. If you do not have a second RS485 device, skip this test and use the TTL-side loopback above.
+
+1. Power down or unplug the XIAO.
+2. Keep the RS485 module connected to the XIAO TTL side:
+   `D6/TX` to module `RXD`, `D7/RX` to module `TXD`, `3V3` to `VCC`, and `GND` to `GND/DNG`.
+3. Disconnect RS485 `A/B/GND` from the JÅN module.
+4. Connect module `A/B/GND` to a known-good USB-RS485 adapter or a second RS485 transceiver.
+5. Flash `adlar_aurora3_xiao_esp32c6_rs485_link_test.yaml`.
+6. Set the other side to `9600 8N2`.
+7. The other side should receive `ADLAR485` every 5 seconds. Bytes sent from the other side should appear in ESPHome as `[uart_debug]` RX lines.
+
+Do not short RS485 `A` to `B` for a one-board loopback test. On many half-duplex automatic-direction boards the receiver is disabled while transmitting, and shorting the differential pair can hide the real problem or overload the driver.
+
+If this link test works, the XIAO and RS485 transceiver are basically functional. If it still cannot communicate with the JÅN module, focus on bus ownership, JÅN terminal wiring, A/B naming, termination/biasing, or whether the JÅN port is only active in a specific operating mode. If this link test fails, replace the RS485 transceiver with a known 3.3V-safe module such as an SP3485/MAX3485-based board or use a proven industrial RS485 gateway.
 
 ## Confirming The Flashed Firmware
 

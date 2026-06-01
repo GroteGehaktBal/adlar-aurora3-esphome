@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.8 - 2026-06-01
+
+- Added a passive Arduino Modbus frame analyzer for decoding existing JÅN bus traffic without transmitting.
+- Updated wiring docs after hardware testing showed the XY-485 board labels `TXD/RXD` from the host/microcontroller point of view.
+
 ## 0.6.7 - 2026-06-01
 
 - Made the Arduino slave scanner print explicit `RX: no reply` lines and identify exact TTL loopback echoes.

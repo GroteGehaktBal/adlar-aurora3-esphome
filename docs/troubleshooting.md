@@ -7,8 +7,8 @@ Start with the ESP powered over USB and the heat pump/JÅN wiring connected with
 Check these first:
 
 1. Confirm the current firmware is really running. The bring-up firmware should show a `Firmware profile` entity with `bring-up 0.3.1 - 9600 8N2 - slave 1 and 251 probe`.
-2. For an XY-485-style board, confirm XIAO `D6/TX` goes to module `RXD` and XIAO `D7/RX` goes to module `TXD`.
-3. If that never produces replies, also try the other TTL orientation: XIAO `D6/TX` to module `TXD` and XIAO `D7/RX` to module `RXD`. Some boards label TX/RX from the microcontroller's point of view.
+2. For the tested XY-485-style board, confirm XIAO `D6/TX` goes to module `TXD` and XIAO `D7/RX` goes to module `RXD`.
+3. If that never produces replies, also try the other TTL orientation: XIAO `D6/TX` to module `RXD` and XIAO `D7/RX` to module `TXD`. Some boards label TX/RX from the module's point of view.
 4. Confirm `GND` is connected between the transceiver and JÅN port. If the board has an `E` terminal, verify with a multimeter whether `E` is common with TTL-side `GND/DNG`; if not, add a proper signal-ground connection.
 5. Swap RS485 `A` and `B` at one end only. Many RS485 boards and devices use opposite `A/B` naming.
 6. For an automatic-direction module, keep `flow_control_pin` out of the YAML and leave `D2` disconnected.

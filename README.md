@@ -86,8 +86,8 @@ Do not short RS485 `A` to `B` as a loopback test. A real RS485 transceiver test 
 
 | XIAO ESP32C6 | GPIO | XY-485 / automatic-direction RS485 module |
 | --- | ---: | --- |
-| D6 / TX | GPIO16 | RXD |
-| D7 / RX | GPIO17 | TXD |
+| D6 / TX | GPIO16 | TXD |
+| D7 / RX | GPIO17 | RXD |
 | 3V3 |  | VCC / UCC |
 | GND |  | GND / DNG |
 
@@ -127,6 +127,7 @@ See [docs/troubleshooting.md](docs/troubleshooting.md) for symptoms such as CRC 
 | `docs/troubleshooting.md` | Troubleshooting and first-test procedure |
 | `tools/arduino_rs485_sniffer/` | Arduino sketch for passive and active 5V RS485 receive testing |
 | `tools/arduino_rs485_slave_scan/` | Arduino sketch for a slow read-only Modbus slave/register scan |
+| `tools/arduino_rs485_passive_analyzer/` | Arduino sketch for decoding existing Modbus frames without transmitting |
 | `docs/publication-notes.md` | Notes for publishing and keeping the project clearly unofficial |
 | `ROADMAP.md` | Possible future improvements |
 | `DISCLAIMER.md` | Unofficial project and safety disclaimer |

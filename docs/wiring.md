@@ -24,7 +24,9 @@ flowchart LR
 
 Use the printed labels on the PCB. Do not rely only on wire colors.
 
-Many RS485-to-TTL boards use `TXD/RXD` from the module's point of view, but some use `TXD/RXD` from the microcontroller's point of view. The two possible TTL wiring conventions are:
+Many RS485-to-TTL boards use `TXD/RXD` from the module's point of view, but some use `TXD/RXD` from the microcontroller's point of view. The tested XY-485 board behaved like the microcontroller-point-of-view convention: XIAO `TX` to board `TXD`, and XIAO `RX` to board `RXD`.
+
+The two possible TTL wiring conventions are:
 
 | Convention | XIAO ESP32C6 | XY-485 board |
 | --- | --- | --- |
@@ -35,7 +37,16 @@ Many RS485-to-TTL boards use `TXD/RXD` from the module's point of view, but some
 
 The main YAML does not change between these two cases; only the two TTL wires change. If active probes show TX activity but never any RS485 reply, try the other TTL orientation before changing Modbus settings.
 
-Default starting point used by this repository:
+Observed working orientation for the XY-485 board used during bring-up:
+
+| XIAO ESP32C6 | GPIO | XY-485 board |
+| --- | ---: | --- |
+| D6 / TX | GPIO16 | TXD |
+| D7 / RX | GPIO17 | RXD |
+| 3V3 |  | VCC / UCC |
+| GND |  | GND / DNG |
+
+Alternative orientation for boards labelled from the module's point of view:
 
 | XIAO ESP32C6 | GPIO | XY-485 board |
 | --- | ---: | --- |

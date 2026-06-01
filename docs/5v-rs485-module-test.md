@@ -19,21 +19,21 @@ The two sides are different:
 
 Use this only with a classic 5V Arduino such as an Uno, Nano, or Mega. Do not use a 3.3V Arduino for this 5V test unless you add level shifting.
 
-Wiring for an Uno/Nano using the sketch in `tools/arduino_rs485_sniffer`:
+Observed working TTL orientation for the tested XY-485 board:
 
 | Arduino Uno/Nano | RS485 module TTL side |
 | --- | --- |
 | `5V` | `VCC` |
 | `GND` | `GND/DNG` |
-| `D10` | `TXD` |
-| `D11` | `RXD` |
+| `D10` | `RXD` |
+| `D11` | `TXD` |
 
-If probes show `TX` requests but always `RX: no reply`, try the alternative TTL orientation before changing any JÅN wiring:
+Alternative orientation for boards labelled from the module's point of view:
 
 | Arduino Uno/Nano | RS485 module TTL side |
 | --- | --- |
-| `D10` | `RXD` |
-| `D11` | `TXD` |
+| `D10` | `TXD` |
+| `D11` | `RXD` |
 
 This is necessary because different RS485 boards use `TXD/RXD` labels from different points of view.
 
@@ -120,6 +120,8 @@ It tries:
 It is still read-only, but it sends many requests. Use it only while watching the heat pump/JÅN behavior, and stop the scan if anything becomes unstable.
 
 If the scanner completes a pass with `Valid replies in this pass: 0` in both A/B orientations, the remaining likely causes are physical bus wiring/topology, the RS485 board not driving/receiving correctly on the differential side, or the JÅN terminal not being the reachable Modbus slave bus expected by the public community examples.
+
+If the active scanner sees valid CRC frames that look like `01:04:00:48:00:01:...` or `01:03:17:EB:00:01:...`, those are probably existing Modbus requests on the bus, not replies to the Arduino probe. Switch to `tools/arduino_rs485_passive_analyzer` to decode the bus without transmitting.
 
 Before interpreting a zero-reply scan, check the startup line:
 

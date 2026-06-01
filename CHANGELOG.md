@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.2 - 2026-06-01
+
+- Added a safe 5V MAX485-style module test guide.
+- Added a passive Arduino RS485 byte sniffer sketch for classic 5V Arduino boards.
+
 ## 0.6.1 - 2026-06-01
 
 - Clarified the difference between RS485 `A/B` bus voltage and ESP-side `TXD/RXD` logic voltage.

@@ -88,6 +88,8 @@ If a 5V MAX485-style module is used anyway, protect the ESP RX pin. A safe patte
 
 Do not connect a module powered from 5V directly to ESP `RX` until module `TXD` has been measured while disconnected from the ESP.
 
+For a safe 5V test with a classic Arduino Uno/Nano/Mega or with an ESPHome sniffer plus voltage divider, see [5V RS485 module test](5v-rs485-module-test.md).
+
 ## Confirming The Flashed Firmware
 
 The local ESPHome web UI is served by the ESP itself. Entity names therefore tell you which firmware is actually running.

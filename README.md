@@ -36,6 +36,8 @@ Do not feed a 5V TTL signal directly into the XIAO ESP32C6. Its GPIO pins are no
 
 The JÅN RS485 `A/B` terminals may measure around 5V because they are the differential bus side. That does not mean the ESP UART `TXD/RXD` side should use 5V. Prefer a 3.3V-safe RS485 transceiver for direct ESP wiring, or level-shift the transceiver `TXD/RO` output before feeding it into ESP `RX`.
 
+If you need to test whether a MAX485-style board requires 5V, see [docs/5v-rs485-module-test.md](docs/5v-rs485-module-test.md). The repository also includes a simple Arduino passive sniffer sketch for classic 5V Arduino boards.
+
 ## Quick Start
 
 1. Clone this repository or import the YAML into ESPHome.
@@ -120,8 +122,10 @@ See [docs/troubleshooting.md](docs/troubleshooting.md) for symptoms such as CRC 
 | `adlar_aurora3_xiao_esp32c6_rs485_link_test.yaml` | RS485 transceiver test firmware for a USB-RS485 adapter or second transceiver |
 | `secrets.example.yaml` | Example secrets file |
 | `docs/wiring.md` | Wiring and RS485 notes |
+| `docs/5v-rs485-module-test.md` | Safe test procedure for 5V MAX485-style modules |
 | `docs/register-map.md` | Register overview, scaling and writable addresses |
 | `docs/troubleshooting.md` | Troubleshooting and first-test procedure |
+| `tools/arduino_rs485_sniffer/` | Arduino sketch for passive 5V RS485 receive testing |
 | `docs/publication-notes.md` | Notes for publishing and keeping the project clearly unofficial |
 | `ROADMAP.md` | Possible future improvements |
 | `DISCLAIMER.md` | Unofficial project and safety disclaimer |

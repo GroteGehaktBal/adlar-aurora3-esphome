@@ -8,11 +8,19 @@ Check these first:
 
 1. Confirm the RS485 module is powered from XIAO `3V3`, not 5V.
 2. For an XY-485-style board, confirm XIAO `D6/TX` goes to module `RXD` and XIAO `D7/RX` goes to module `TXD`.
-3. Swap RS485 `A` and `B`.
-4. Confirm `GND` is connected between the transceiver and JÅN port.
+3. Confirm `GND` is connected between the transceiver and JÅN port. If the board has an `E` terminal, verify with a multimeter whether `E` is common with TTL-side `GND/DNG`; if not, add a proper signal-ground connection.
+4. Swap RS485 `A` and `B` at one end only. Many RS485 boards and devices use opposite `A/B` naming.
 5. For an automatic-direction module, keep `flow_control_pin` out of the YAML and leave `D2` disconnected.
 6. If your RS485 module needs manual direction, tie `DE` and `/RE` together, connect them to `D2`, and add `flow_control_pin: D2`.
 7. Try slave ID `1` first, then verify with a Modbus scanner if needed.
+
+Useful LED check for XY-485-style boards:
+
+- No TTL-side LED activity while ESPHome is online: check module power and XIAO `D6/D7` wiring.
+- TX activity but no RX activity: check JÅN `A/B/GND`, then swap `A/B`.
+- TX and RX activity but all values stay `NA`: check baud rate, slave ID, parity and register assumptions.
+
+Do not use Home Assistant write controls until at least a few read-only sensors show plausible values.
 
 ## USB Port Disappears While Flashing
 

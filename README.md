@@ -66,6 +66,10 @@ If the bring-up firmware sends requests but gets no replies, flash `adlar_aurora
 
 Use this to confirm whether the XIAO and RS485 module can hear the existing JÅN/heat-pump bus traffic before debugging active Modbus polling.
 
+## UART Loopback Test
+
+If the sniffer logs no RX bytes, flash `adlar_aurora3_xiao_esp32c6_uart_loopback.yaml`. Disconnect the RS485 module, temporarily short XIAO `D6` to XIAO `D7`, and watch the logs. Matching `[uart_debug]` TX and RX lines prove the ESPHome UART pins are working before replacing or retesting the RS485 transceiver.
+
 ## Wiring Summary
 
 | XIAO ESP32C6 | GPIO | XY-485 / automatic-direction RS485 module |
@@ -102,6 +106,7 @@ See [docs/troubleshooting.md](docs/troubleshooting.md) for symptoms such as CRC 
 | `adlar_aurora3_xiao_esp32c6.yaml` | Main ESPHome configuration |
 | `adlar_aurora3_xiao_esp32c6_bringup.yaml` | Minimal one-register-per-minute first-contact firmware |
 | `adlar_aurora3_xiao_esp32c6_sniffer.yaml` | Passive RS485 receive-only sniffer firmware |
+| `adlar_aurora3_xiao_esp32c6_uart_loopback.yaml` | Local XIAO D6/D7 UART loopback test firmware |
 | `secrets.example.yaml` | Example secrets file |
 | `docs/wiring.md` | Wiring and RS485 notes |
 | `docs/register-map.md` | Register overview, scaling and writable addresses |

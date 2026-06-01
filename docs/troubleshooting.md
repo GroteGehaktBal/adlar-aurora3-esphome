@@ -35,6 +35,24 @@ Results:
 - No `[uart_debug]` RX lines appear: check XIAO `D7/RX` to RS485 module `TXD`, module power, JÅN `GND` to TTL-side `GND/DNG`, and both A/B orientations.
 - RX lines appear only in one A/B orientation: keep that orientation for further tests.
 
+## UART Loopback Test
+
+If the sniffer profile shows no `[uart_debug]` RX lines in either A/B orientation, test the XIAO UART pins by themselves.
+
+1. Power down or unplug the XIAO.
+2. Disconnect the RS485 module from the XIAO.
+3. Temporarily connect XIAO `D6` directly to XIAO `D7`.
+4. Flash `adlar_aurora3_xiao_esp32c6_uart_loopback.yaml`.
+5. Watch ESPHome logs for matching `[uart_debug]` TX and RX byte lines every 5 seconds.
+
+If loopback works, the XIAO pins and ESPHome UART configuration are good. Focus next on the RS485 transceiver module or the JÅN bus connection. If loopback does not work, check that the board really exposes XIAO `D6` as GPIO16 and `D7` as GPIO17, and inspect solder joints on those pins.
+
+With the sniffer firmware powered and the RS485 module connected, useful idle voltage checks are:
+
+- XIAO `D6` / module `RXD` to GND: should sit near `3.3V`.
+- Module `TXD` / XIAO `D7` to GND: should usually sit near `3.3V` when the RS485 receiver is idle.
+- JÅN `GND`, module `DNG/GND`, and XIAO `GND`: should be continuous.
+
 ## Confirming The Flashed Firmware
 
 The local ESPHome web UI is served by the ESP itself. Entity names therefore tell you which firmware is actually running.

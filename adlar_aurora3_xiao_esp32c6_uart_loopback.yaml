@@ -1,0 +1,142 @@
+---
+# Local UART loopback test firmware for the Seeed Studio XIAO ESP32C6.
+#
+# Purpose:
+# - Prove that XIAO D6/TX (GPIO16) and D7/RX (GPIO17) work in ESPHome.
+# - Test without the RS485 module and without the JÅN module connected.
+#
+# Test wiring:
+# - Disconnect the RS485 module from the XIAO.
+# - Temporarily connect XIAO D6 directly to XIAO D7.
+# - Flash this firmware and watch ESPHome logs for matching TX and RX bytes.
+
+substitutions:
+  name: adlar-aurora3
+  friendly_name: Adlar Aurora III
+  firmware_profile: "uart-loopback 0.5.0 - short D6 to D7"
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+  comment: "XIAO ESP32C6 UART D6/D7 loopback test"
+  project:
+    name: grotegehaktbal.adlar_aurora3_esphome
+    version: "0.5.0-uart-loopback"
+
+dashboard_import:
+  package_import_url: github://GroteGehaktBal/adlar-aurora3-esphome/adlar_aurora3_xiao_esp32c6_uart_loopback.yaml@main
+  import_full_config: true
+
+esp32:
+  board: seeed_xiao_esp32c6
+  variant: esp32c6
+  framework:
+    type: esp-idf
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  min_auth_mode: WPA2
+  ap:
+    ssid: "${friendly_name} fallback"
+    password: !secret fallback_ap_password
+
+captive_portal:
+
+api:
+  encryption:
+    key: !secret api_encryption_key
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+logger:
+  level: DEBUG
+  baud_rate: 0
+
+web_server:
+  port: 80
+  version: 3
+  sorting_groups:
+    - id: group_diagnostics
+      name: Diagnostics
+      sorting_weight: 10
+
+button:
+  - platform: restart
+    name: "Restart ESP"
+    entity_category: diagnostic
+
+uart:
+  id: uart_loopback
+  tx_pin: D6
+  rx_pin: D7
+  baud_rate: 9600
+  data_bits: 8
+  parity: NONE
+  stop_bits: 2
+  rx_buffer_size: 512
+  debug:
+    direction: BOTH
+    dummy_receiver: true
+    after:
+      bytes: 8
+      timeout: 50ms
+
+interval:
+  - interval: 5s
+    then:
+      - uart.write:
+          id: uart_loopback
+          data: [0x55, 0xAA, 0x01, 0x02, 0x03, 0x04, 0x0D, 0x0A]
+
+binary_sensor:
+  - platform: status
+    name: "ESP online"
+    entity_category: diagnostic
+
+sensor:
+  - platform: wifi_signal
+    name: "ESP WiFi signal"
+    update_interval: 60s
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: uptime
+    name: "ESP uptime"
+    update_interval: 60s
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+
+text_sensor:
+  - platform: wifi_info
+    ip_address:
+      name: "ESP IP"
+      entity_category: diagnostic
+      web_server:
+        sorting_group_id: group_diagnostics
+    ssid:
+      name: "ESP WiFi SSID"
+      entity_category: diagnostic
+      web_server:
+        sorting_group_id: group_diagnostics
+
+  - platform: template
+    name: "Firmware profile"
+    entity_category: diagnostic
+    update_interval: 60s
+    lambda: |-
+      return std::string("${firmware_profile}");
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: template
+    name: "Loopback status"
+    update_interval: 60s
+    lambda: |-
+      return std::string("Disconnect RS485. Short D6 to D7. Logs should show matching TX and RX bytes.");
+    web_server:
+      sorting_group_id: group_diagnostics

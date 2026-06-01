@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.0 - 2026-06-01
+
+- Added a local XIAO D6/D7 UART loopback firmware for proving the ESPHome UART pins independently from the RS485 transceiver and JÅN bus.
+- Documented idle voltage checks for the RS485 TTL side.
+
 ## 0.4.1 - 2026-06-01
 
 - Updated the passive sniffer to declare XIAO `D6/TX` so automatic-direction RS485 boards see a stable UART idle-high input while sniffing.

@@ -6,19 +6,20 @@ Start with the ESP powered over USB and the heat pump/JÅN wiring connected with
 
 Check these first:
 
-1. Confirm the RS485 module is powered from XIAO `3V3`, not 5V.
+1. Confirm the current firmware is the Aurora III profile: `9600` baud, `8N2`, input-register reads and slave ID `1`.
 2. For an XY-485-style board, confirm XIAO `D6/TX` goes to module `RXD` and XIAO `D7/RX` goes to module `TXD`.
 3. Confirm `GND` is connected between the transceiver and JÅN port. If the board has an `E` terminal, verify with a multimeter whether `E` is common with TTL-side `GND/DNG`; if not, add a proper signal-ground connection.
 4. Swap RS485 `A` and `B` at one end only. Many RS485 boards and devices use opposite `A/B` naming.
 5. For an automatic-direction module, keep `flow_control_pin` out of the YAML and leave `D2` disconnected.
 6. If your RS485 module needs manual direction, tie `DE` and `/RE` together, connect them to `D2`, and add `flow_control_pin: D2`.
-7. Try slave ID `1` first, then verify with a Modbus scanner if needed.
+7. Try slave ID `1` first. If there is still no response after wiring is confirmed, try `251`, which appears in Aurora III protocol notes.
 
 Useful LED check for XY-485-style boards:
 
 - No TTL-side LED activity while ESPHome is online: check module power and XIAO `D6/D7` wiring.
 - TX activity but no RX activity: check JÅN `A/B/GND`, then swap `A/B`.
-- TX and RX activity but all values stay `NA`: check baud rate, slave ID, parity and register assumptions.
+- TX activity but no RX activity after the 0.2.0 firmware: check common ground and slave ID.
+- TX and RX activity but all values stay `NA`: check baud rate, slave ID, parity, stop bits and register assumptions.
 
 Do not use Home Assistant write controls until at least a few read-only sensors show plausible values.
 
@@ -47,6 +48,19 @@ On macOS, the correct port usually looks like `/dev/cu.usbmodemXXXX`. Ignore `cu
 
 References: [Seeed XIAO ESP32C6 BootLoader Mode](https://wiki.seeedstudio.com/xiao_esp32c6_getting_started/#bootloader-mode) and [Espressif ESP32-C6 Boot Mode Selection](https://docs.espressif.com/projects/esptool/en/latest/esp32c6/advanced-topics/boot-mode-selection.html).
 
+## Parallel JÅN Bus Notes
+
+The existing JÅN wires should stay connected. This project taps the same RS485 bus in parallel, as public Aurora III community examples do. Because Modbus RTU does not arbitrate multiple masters, the firmware polls slowly and groups reads. If the heat pump or JÅN becomes unstable, disconnect the ESP/RS485 module and return to the original wiring.
+
+Do not enable Home Assistant write entities until these read-only entities show plausible values:
+
+- `System status bits`
+- `Heat pump status text`
+- `Inlet water temperature`
+- `Outlet water temperature`
+- `Water flow`
+- `Compressor actual frequency`
+
 ## CRC Errors Or Intermittent Timeouts
 
 Likely causes:
@@ -55,29 +69,30 @@ Likely causes:
 - Long cable without suitable termination/biasing.
 - Another Modbus master is already active on the same RS485 bus.
 - Polling too fast.
+- Wrong stop-bit setting. Aurora III community configs use `8N2`, not `8N1`.
 
-Keep `modbus_update_interval` at `30s` or slower during early testing. Do not lower `modbus_command_throttle` until the bus is stable.
+Keep `modbus_update_interval` at `60s` or slower during early testing. Do not lower `modbus_command_throttle` until the bus is stable.
 
 ## Temperatures Are 10x Wrong
 
-Some related R290 protocol descriptions use tenths of a degree. This YAML uses whole degrees because the found Adlar/Home Assistant example does. If values are exactly 10x too high or low, adjust scaling consistently for both sensors and writable setpoints.
+The Aurora III profile uses tenths of a degree. If values are exactly 10x too high or low on your unit, adjust scaling consistently for both sensors and writable setpoints.
 
 ## Writes Do Not Stick
 
 Check:
 
 - Whether the heat pump is in a mode that allows that setting.
-- Whether the JÅN module or original controller overwrites the value.
+- Whether the JÅN module overwrites register `2107` through weather compensation.
 - Whether the register uses single-register write. This YAML uses `use_write_multiple: false` for writable controls.
 - Whether your installation uses another master on the same RS485 bus.
 
 ## Suggested First Entities To Watch
 
-- `Running status 1 raw`
+- `System status bits`
 - `Heat pump status text`
-- `Return water temperature T6`
-- `Supply water temperature T7`
+- `Inlet water temperature`
+- `Outlet water temperature`
 - `Water flow`
-- `Compressor frequency`
+- `Compressor actual frequency`
 
-Only after these behave sensibly should you test `Heating water temperature setpoint`.
+Only after these behave sensibly should you enable and test `Zone 1 heating setpoint`.

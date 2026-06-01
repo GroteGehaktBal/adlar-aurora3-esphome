@@ -2,6 +2,7 @@
 
 # ESPHome local secrets and generated firmware/build output.
 secrets.yaml
+.venv/
 .esphome/
 build/
 *.bin

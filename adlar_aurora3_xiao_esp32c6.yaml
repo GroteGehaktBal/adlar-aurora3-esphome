@@ -1,17 +1,21 @@
 ---
-# ESPHome configuration for an Adlar Aurora III / SolarEast R290 heat pump
-# through the JÅN module RS485 Modbus RTU port.
+# ESPHome configuration for an Adlar Aurora III / Adlar Castra Aurora III Pro
+# heat pump through the JÅN module RS485 Modbus RTU terminals.
 #
-# Public safety note:
-# Start with read-only monitoring, verify stable Modbus traffic, and only then
-# enable write controls in Home Assistant.
+# This profile follows the Aurora III community mapping: 9600 8N2, input
+# registers for live telemetry, and holding registers for the limited controls.
+#
+# Safety note:
+# Start with monitoring only. Write entities are disabled by default because the
+# JÅN module can overwrite setpoints and because Modbus RTU has no bus arbitration.
 
 substitutions:
   name: adlar-aurora3
   friendly_name: Adlar Aurora III
   modbus_slave_id: "1"
-  modbus_update_interval: 30s
-  modbus_command_throttle: 250ms
+  modbus_update_interval: 60s
+  modbus_command_throttle: 750ms
+  modbus_send_wait_time: 500ms
 
 esphome:
   name: ${name}
@@ -19,7 +23,7 @@ esphome:
   comment: "Adlar Aurora III / SolarEast R290 through JÅN module RS485 Modbus RTU on Seeed Studio XIAO ESP32C6"
   project:
     name: grotegehaktbal.adlar_aurora3_esphome
-    version: "0.1.0"
+    version: "0.2.0"
 
 dashboard_import:
   package_import_url: github://GroteGehaktBal/adlar-aurora3-esphome/adlar_aurora3_xiao_esp32c6.yaml@main
@@ -63,12 +67,15 @@ web_server:
     - id: group_temperatures
       name: Temperatures
       sorting_weight: 20
+    - id: group_hydraulics
+      name: Hydraulics
+      sorting_weight: 30
     - id: group_power
       name: Power
-      sorting_weight: 30
+      sorting_weight: 40
     - id: group_controls
       name: Controls
-      sorting_weight: 40
+      sorting_weight: 80
     - id: group_diagnostics
       name: Diagnostics
       sorting_weight: 90
@@ -85,7 +92,7 @@ uart:
   baud_rate: 9600
   data_bits: 8
   parity: NONE
-  stop_bits: 1
+  stop_bits: 2
 
 modbus:
   id: modbus_rs485
@@ -93,7 +100,7 @@ modbus:
   # The tested XY-485-style module has automatic RS485 direction control.
   # For manual-direction MAX485 modules, wire DE + /RE to a GPIO and set:
   # flow_control_pin: D2
-  send_wait_time: 250ms
+  send_wait_time: ${modbus_send_wait_time}
 
 modbus_controller:
   - id: aurora3
@@ -108,86 +115,76 @@ binary_sensor:
     name: "ESP online"
     entity_category: diagnostic
 
-  - platform: modbus_controller
-    modbus_controller_id: aurora3
-    name: "Heat pump defrost"
-    register_type: holding
-    address: 0x0000
-    bitmask: 0x0100
+  - platform: template
+    name: "Heat pump oil return active"
+    lambda: |-
+      if (isnan(id(system_status_bits).state)) return {};
+      return ((uint16_t) id(system_status_bits).state & 0x0001) != 0;
     device_class: running
     web_server:
       sorting_group_id: group_status
 
-  - platform: modbus_controller
-    modbus_controller_id: aurora3
-    name: "Heat pump fault warning"
-    register_type: holding
-    address: 0x0000
-    bitmask: 0x0008
+  - platform: template
+    name: "Heat pump defrost active"
+    lambda: |-
+      if (isnan(id(system_status_bits).state)) return {};
+      return ((uint16_t) id(system_status_bits).state & 0x0002) != 0;
+    device_class: running
+    web_server:
+      sorting_group_id: group_status
+
+  - platform: template
+    name: "Heat pump anti-freezing active"
+    lambda: |-
+      if (isnan(id(system_status_bits).state)) return {};
+      return ((uint16_t) id(system_status_bits).state & 0x0004) != 0;
+    device_class: running
+    web_server:
+      sorting_group_id: group_status
+
+  - platform: template
+    name: "Heat pump compressor running"
+    lambda: |-
+      if (isnan(id(compressor_actual_frequency).state)) return {};
+      return id(compressor_actual_frequency).state > 0.0f;
+    device_class: running
+    web_server:
+      sorting_group_id: group_status
+
+  - platform: template
+    name: "Heat pump main water pump on"
+    lambda: |-
+      if (isnan(id(main_water_pump_status_raw).state)) return {};
+      return ((uint16_t) id(main_water_pump_status_raw).state) == 1;
+    device_class: running
+    web_server:
+      sorting_group_id: group_status
+
+  - platform: template
+    name: "Heat pump cooling cycle valve"
+    lambda: |-
+      if (isnan(id(four_way_valve_status_raw).state)) return {};
+      return ((uint16_t) id(four_way_valve_status_raw).state) == 1;
+    web_server:
+      sorting_group_id: group_status
+
+  - platform: template
+    name: "Heat pump E-error active"
+    lambda: |-
+      if (isnan(id(error_e01_e16).state) || isnan(id(error_e17_e32).state)) return {};
+      return id(error_e01_e16).state > 0.0f || id(error_e17_e32).state > 0.0f;
     device_class: problem
     web_server:
       sorting_group_id: group_status
 
-  - platform: modbus_controller
-    modbus_controller_id: aurora3
-    name: "Heat pump running"
-    register_type: holding
-    address: 0x0000
-    bitmask: 0x4000
-    device_class: running
+  - platform: template
+    name: "Heat pump P-error active"
+    lambda: |-
+      if (isnan(id(error_p01_p16).state) || isnan(id(error_p17_p32).state)) return {};
+      return id(error_p01_p16).state > 0.0f || id(error_p17_p32).state > 0.0f;
+    device_class: problem
     web_server:
       sorting_group_id: group_status
-
-  - platform: modbus_controller
-    modbus_controller_id: aurora3
-    name: "Heat pump waiting to start"
-    register_type: holding
-    address: 0x0000
-    bitmask: 0x8000
-    device_class: running
-    web_server:
-      sorting_group_id: group_status
-
-  - platform: modbus_controller
-    modbus_controller_id: aurora3
-    name: "Controller power"
-    register_type: holding
-    address: 0x0001
-    bitmask: 0x0400
-    device_class: power
-    web_server:
-      sorting_group_id: group_status
-
-  - platform: modbus_controller
-    modbus_controller_id: aurora3
-    name: "Compressor active"
-    register_type: holding
-    address: 0x001A
-    bitmask: 0x0001
-    device_class: running
-    web_server:
-      sorting_group_id: group_status
-
-  - platform: modbus_controller
-    modbus_controller_id: aurora3
-    name: "Circulation pump active"
-    register_type: holding
-    address: 0x0019
-    bitmask: 0x0040
-    device_class: running
-    web_server:
-      sorting_group_id: group_status
-
-  - platform: modbus_controller
-    modbus_controller_id: aurora3
-    name: "Water flow switch"
-    register_type: holding
-    address: 0x001D
-    bitmask: 0x0100
-    device_class: running
-    entity_category: diagnostic
-    web_server:
-      sorting_group_id: group_diagnostics
 
 sensor:
   - platform: wifi_signal
@@ -202,10 +199,10 @@ sensor:
 
   - platform: modbus_controller
     modbus_controller_id: aurora3
-    id: running_status_1
-    name: "Running status 1 raw"
-    register_type: holding
-    address: 0x0000
+    id: effective_mode_raw
+    name: "Effective mode raw"
+    register_type: read
+    address: 9
     value_type: U_WORD
     accuracy_decimals: 0
     entity_category: diagnostic
@@ -214,10 +211,11 @@ sensor:
 
   - platform: modbus_controller
     modbus_controller_id: aurora3
-    id: running_status_2
-    name: "Running status 2 raw"
-    register_type: holding
-    address: 0x0001
+    id: system_status_bits
+    name: "System status bits"
+    register_type: read
+    address: 38
+    register_count: 19
     value_type: U_WORD
     accuracy_decimals: 0
     entity_category: diagnostic
@@ -226,72 +224,313 @@ sensor:
 
   - platform: modbus_controller
     modbus_controller_id: aurora3
-    id: fault_state_1
-    name: "Fault state 1 raw"
-    register_type: holding
-    address: 0x0002
+    id: external_heat_request_raw
+    name: "External heat request raw"
+    register_type: read
+    address: 39
     value_type: U_WORD
     accuracy_decimals: 0
     entity_category: diagnostic
+    disabled_by_default: true
     web_server:
       sorting_group_id: group_diagnostics
 
   - platform: modbus_controller
     modbus_controller_id: aurora3
-    id: fault_state_2
-    name: "Fault state 2 raw"
-    register_type: holding
-    address: 0x0003
-    value_type: U_WORD
-    accuracy_decimals: 0
-    entity_category: diagnostic
-    web_server:
-      sorting_group_id: group_diagnostics
-
-  - platform: modbus_controller
-    modbus_controller_id: aurora3
-    id: fault_state_3
-    name: "Fault state 3 raw"
-    register_type: holding
-    address: 0x0004
-    value_type: U_WORD
-    accuracy_decimals: 0
-    entity_category: diagnostic
-    web_server:
-      sorting_group_id: group_diagnostics
-
-  - platform: modbus_controller
-    modbus_controller_id: aurora3
-    name: "Compressor target frequency"
-    register_type: holding
-    address: 0x0027
+    id: room_temperature
+    name: "Room temperature"
+    register_type: read
+    address: 40
     value_type: S_WORD
-    unit_of_measurement: "Hz"
-    device_class: frequency
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+    web_server:
+      sorting_group_id: group_temperatures
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    id: total_leaving_water_temperature
+    name: "Total leaving water temperature"
+    register_type: read
+    address: 41
+    value_type: S_WORD
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    disabled_by_default: true
+    filters:
+      - multiply: 0.1
+    web_server:
+      sorting_group_id: group_temperatures
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    id: inlet_water_temperature
+    name: "Inlet water temperature"
+    register_type: read
+    address: 42
+    value_type: S_WORD
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+    web_server:
+      sorting_group_id: group_temperatures
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    id: outlet_water_temperature
+    name: "Outlet water temperature"
+    register_type: read
+    address: 43
+    value_type: S_WORD
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+    web_server:
+      sorting_group_id: group_temperatures
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    id: dhw_tank_temperature
+    name: "DHW tank temperature"
+    register_type: read
+    address: 46
+    value_type: S_WORD
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    disabled_by_default: true
+    filters:
+      - multiply: 0.1
+    web_server:
+      sorting_group_id: group_temperatures
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    id: outdoor_unit_coil_temperature
+    name: "Outdoor unit coil temperature"
+    register_type: read
+    address: 49
+    value_type: S_WORD
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    disabled_by_default: true
+    filters:
+      - multiply: 0.1
+    web_server:
+      sorting_group_id: group_temperatures
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    id: ambient_temperature
+    name: "Ambient temperature"
+    register_type: read
+    address: 50
+    value_type: S_WORD
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+    web_server:
+      sorting_group_id: group_temperatures
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    id: discharge_temperature
+    name: "Discharge temperature"
+    register_type: read
+    address: 52
+    value_type: S_WORD
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+    web_server:
+      sorting_group_id: group_temperatures
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    id: suction_temperature
+    name: "Suction temperature"
+    register_type: read
+    address: 53
+    value_type: S_WORD
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    disabled_by_default: true
+    filters:
+      - multiply: 0.1
+    web_server:
+      sorting_group_id: group_temperatures
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    id: target_outlet_temperature
+    name: "Target outlet temperature"
+    register_type: read
+    address: 56
+    value_type: S_WORD
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+    web_server:
+      sorting_group_id: group_temperatures
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    id: inlet_water_pressure
+    name: "Inlet water pressure"
+    register_type: read
+    address: 60
+    register_count: 8
+    value_type: U_WORD
+    unit_of_measurement: "bar"
+    device_class: pressure
+    state_class: measurement
+    accuracy_decimals: 1
+    disabled_by_default: true
+    filters:
+      - multiply: 0.1
+    web_server:
+      sorting_group_id: group_hydraulics
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    id: outlet_water_pressure
+    name: "Outlet water pressure"
+    register_type: read
+    address: 61
+    value_type: U_WORD
+    unit_of_measurement: "bar"
+    device_class: pressure
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+    web_server:
+      sorting_group_id: group_hydraulics
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    id: pump_pwm_output
+    name: "Pump PWM output"
+    register_type: read
+    address: 62
+    value_type: U_WORD
+    unit_of_measurement: "%"
     state_class: measurement
     accuracy_decimals: 0
     web_server:
-      sorting_group_id: group_status
+      sorting_group_id: group_hydraulics
 
   - platform: modbus_controller
     modbus_controller_id: aurora3
-    name: "Compressor frequency"
-    register_type: holding
-    address: 0x0040
-    value_type: S_WORD
-    unit_of_measurement: "Hz"
-    device_class: frequency
+    id: pump_pwm_feedback
+    name: "Pump PWM feedback"
+    register_type: read
+    address: 63
+    value_type: U_WORD
+    unit_of_measurement: "%"
     state_class: measurement
     accuracy_decimals: 0
+    disabled_by_default: true
     web_server:
-      sorting_group_id: group_status
+      sorting_group_id: group_hydraulics
 
   - platform: modbus_controller
     modbus_controller_id: aurora3
+    id: water_flow
+    name: "Water flow"
+    register_type: read
+    address: 64
+    value_type: U_WORD
+    unit_of_measurement: "m³/h"
+    device_class: volume_flow_rate
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+    web_server:
+      sorting_group_id: group_hydraulics
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    id: climate_curve_cooling_set
+    name: "Climate curve cooling set"
+    register_type: read
+    address: 66
+    value_type: S_WORD
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    disabled_by_default: true
+    filters:
+      - multiply: 0.1
+    web_server:
+      sorting_group_id: group_controls
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    id: climate_curve_heating_set
+    name: "Climate curve heating set"
+    register_type: read
+    address: 67
+    value_type: S_WORD
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+    web_server:
+      sorting_group_id: group_controls
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    id: eev_opening
+    name: "EEV opening"
+    register_type: read
+    address: 70
+    register_count: 10
+    value_type: U_WORD
+    unit_of_measurement: "steps"
+    state_class: measurement
+    accuracy_decimals: 0
+    disabled_by_default: true
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    id: fan_speed
     name: "Fan speed"
-    register_type: holding
-    address: 0x0041
-    value_type: S_WORD
+    register_type: read
+    address: 72
+    value_type: U_WORD
     unit_of_measurement: "rpm"
     state_class: measurement
     accuracy_decimals: 0
@@ -300,266 +539,332 @@ sensor:
 
   - platform: modbus_controller
     modbus_controller_id: aurora3
-    name: "EEV steps"
-    register_type: holding
-    address: 0x0042
-    value_type: S_WORD
-    state_class: measurement
-    accuracy_decimals: 0
-    entity_category: diagnostic
-    web_server:
-      sorting_group_id: group_diagnostics
-
-  - platform: modbus_controller
-    modbus_controller_id: aurora3
-    name: "AC input voltage"
-    register_type: holding
-    address: 0x0044
-    value_type: S_WORD
+    id: ac_voltage
+    name: "AC voltage"
+    register_type: read
+    address: 74
+    value_type: U_WORD
     unit_of_measurement: "V"
     device_class: voltage
     state_class: measurement
     accuracy_decimals: 0
-    web_server:
-      sorting_group_id: group_power
-
-  - platform: modbus_controller
-    modbus_controller_id: aurora3
-    name: "AC input current"
-    register_type: holding
-    address: 0x0045
-    value_type: S_WORD
-    unit_of_measurement: "A"
-    device_class: current
-    state_class: measurement
-    accuracy_decimals: 1
-    filters:
-      - multiply: 0.1
-    web_server:
-      sorting_group_id: group_power
-
-  - platform: modbus_controller
-    modbus_controller_id: aurora3
-    name: "Compressor phase current"
-    register_type: holding
-    address: 0x0046
-    value_type: S_WORD
-    unit_of_measurement: "A"
-    device_class: current
-    state_class: measurement
-    accuracy_decimals: 1
-    filters:
-      - multiply: 0.1
-    web_server:
-      sorting_group_id: group_power
-
-  - platform: modbus_controller
-    modbus_controller_id: aurora3
-    name: "Compressor IPM temperature"
-    register_type: holding
-    address: 0x0047
-    value_type: S_WORD
-    unit_of_measurement: "°C"
-    device_class: temperature
-    state_class: measurement
-    accuracy_decimals: 0
-    web_server:
-      sorting_group_id: group_temperatures
-
-  - platform: modbus_controller
-    modbus_controller_id: aurora3
-    name: "High pressure saturation temperature"
-    register_type: holding
-    address: 0x0048
-    value_type: S_WORD
-    unit_of_measurement: "°C"
-    device_class: temperature
-    state_class: measurement
-    accuracy_decimals: 0
-    entity_category: diagnostic
-    web_server:
-      sorting_group_id: group_diagnostics
-
-  - platform: modbus_controller
-    modbus_controller_id: aurora3
-    name: "Low pressure saturation temperature"
-    register_type: holding
-    address: 0x0049
-    value_type: S_WORD
-    unit_of_measurement: "°C"
-    device_class: temperature
-    state_class: measurement
-    accuracy_decimals: 0
-    entity_category: diagnostic
-    web_server:
-      sorting_group_id: group_diagnostics
-
-  - platform: modbus_controller
-    modbus_controller_id: aurora3
-    id: ambient_temp_t1
-    name: "Ambient temperature T1"
-    register_type: holding
-    address: 0x004A
-    value_type: S_WORD
-    unit_of_measurement: "°C"
-    device_class: temperature
-    state_class: measurement
-    accuracy_decimals: 0
-    web_server:
-      sorting_group_id: group_temperatures
-
-  - platform: modbus_controller
-    modbus_controller_id: aurora3
-    name: "Outdoor coil temperature T2"
-    register_type: holding
-    address: 0x004B
-    value_type: S_WORD
-    unit_of_measurement: "°C"
-    device_class: temperature
-    state_class: measurement
-    accuracy_decimals: 0
-    web_server:
-      sorting_group_id: group_temperatures
-
-  - platform: modbus_controller
-    modbus_controller_id: aurora3
-    name: "Indoor coil temperature T3"
-    register_type: holding
-    address: 0x004C
-    value_type: S_WORD
-    unit_of_measurement: "°C"
-    device_class: temperature
-    state_class: measurement
-    accuracy_decimals: 0
-    web_server:
-      sorting_group_id: group_temperatures
-
-  - platform: modbus_controller
-    modbus_controller_id: aurora3
-    name: "Suction gas temperature T4"
-    register_type: holding
-    address: 0x004D
-    value_type: S_WORD
-    unit_of_measurement: "°C"
-    device_class: temperature
-    state_class: measurement
-    accuracy_decimals: 0
-    entity_category: diagnostic
-    web_server:
-      sorting_group_id: group_diagnostics
-
-  - platform: modbus_controller
-    modbus_controller_id: aurora3
-    name: "Discharge gas temperature T5"
-    register_type: holding
-    address: 0x004E
-    value_type: S_WORD
-    unit_of_measurement: "°C"
-    device_class: temperature
-    state_class: measurement
-    accuracy_decimals: 0
-    entity_category: diagnostic
-    web_server:
-      sorting_group_id: group_diagnostics
-
-  - platform: modbus_controller
-    modbus_controller_id: aurora3
-    id: return_water_t6
-    name: "Return water temperature T6"
-    register_type: holding
-    address: 0x004F
-    value_type: S_WORD
-    unit_of_measurement: "°C"
-    device_class: temperature
-    state_class: measurement
-    accuracy_decimals: 0
-    web_server:
-      sorting_group_id: group_temperatures
-
-  - platform: modbus_controller
-    modbus_controller_id: aurora3
-    id: supply_water_t7
-    name: "Supply water temperature T7"
-    register_type: holding
-    address: 0x0050
-    value_type: S_WORD
-    unit_of_measurement: "°C"
-    device_class: temperature
-    state_class: measurement
-    accuracy_decimals: 0
-    web_server:
-      sorting_group_id: group_temperatures
-
-  - platform: modbus_controller
-    modbus_controller_id: aurora3
-    name: "DHW tank temperature"
-    register_type: holding
-    address: 0x0054
-    value_type: S_WORD
-    unit_of_measurement: "°C"
-    device_class: temperature
-    state_class: measurement
-    accuracy_decimals: 0
     disabled_by_default: true
     web_server:
-      sorting_group_id: group_temperatures
-
-  - platform: modbus_controller
-    modbus_controller_id: aurora3
-    name: "Pump PWM value"
-    register_type: holding
-    address: 0x0057
-    value_type: S_WORD
-    state_class: measurement
-    accuracy_decimals: 0
-    web_server:
-      sorting_group_id: group_status
-
-  - platform: modbus_controller
-    modbus_controller_id: aurora3
-    id: water_flow
-    name: "Water flow"
-    register_type: holding
-    address: 0x0058
-    value_type: S_WORD
-    unit_of_measurement: "L/min"
-    state_class: measurement
-    accuracy_decimals: 1
-    web_server:
-      sorting_group_id: group_status
-
-  - platform: modbus_controller
-    modbus_controller_id: aurora3
-    name: "Input power"
-    register_type: holding
-    address: 0x005C
-    value_type: S_WORD
-    unit_of_measurement: "kW"
-    device_class: power
-    state_class: measurement
-    accuracy_decimals: 2
-    disabled_by_default: true
-    filters:
-      - multiply: 0.01
-    web_server:
       sorting_group_id: group_power
 
   - platform: modbus_controller
     modbus_controller_id: aurora3
-    name: "Total heat pump electricity consumption"
-    register_type: holding
-    address: 0x005D
+    id: ac_current
+    name: "AC current"
+    register_type: read
+    address: 75
     value_type: U_WORD
-    unit_of_measurement: "kWh"
-    device_class: energy
-    state_class: total_increasing
+    unit_of_measurement: "A"
+    device_class: current
+    state_class: measurement
+    accuracy_decimals: 1
+    disabled_by_default: true
+    filters:
+      - multiply: 0.1
+    web_server:
+      sorting_group_id: group_power
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    id: dc_bus_voltage
+    name: "DC bus voltage"
+    register_type: read
+    address: 76
+    value_type: U_WORD
+    unit_of_measurement: "V"
+    device_class: voltage
+    state_class: measurement
     accuracy_decimals: 0
     disabled_by_default: true
     web_server:
       sorting_group_id: group_power
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    id: compressor_current
+    name: "Compressor current"
+    register_type: read
+    address: 77
+    value_type: U_WORD
+    unit_of_measurement: "A"
+    device_class: current
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+    web_server:
+      sorting_group_id: group_power
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    id: compressor_target_frequency
+    name: "Compressor target frequency"
+    register_type: read
+    address: 78
+    value_type: U_WORD
+    unit_of_measurement: "Hz"
+    device_class: frequency
+    state_class: measurement
+    accuracy_decimals: 0
+    web_server:
+      sorting_group_id: group_status
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    id: compressor_actual_frequency
+    name: "Compressor actual frequency"
+    register_type: read
+    address: 79
+    value_type: U_WORD
+    unit_of_measurement: "Hz"
+    device_class: frequency
+    state_class: measurement
+    accuracy_decimals: 0
+    web_server:
+      sorting_group_id: group_status
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    id: main_water_pump_status_raw
+    name: "Main water pump status raw"
+    register_type: read
+    address: 80
+    register_count: 2
+    value_type: U_WORD
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    id: four_way_valve_status_raw
+    name: "Four-way valve status raw"
+    register_type: read
+    address: 81
+    value_type: U_WORD
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    disabled_by_default: true
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    id: high_pressure
+    name: "High pressure"
+    register_type: read
+    address: 86
+    register_count: 2
+    value_type: U_WORD
+    unit_of_measurement: "kPa"
+    device_class: pressure
+    state_class: measurement
+    accuracy_decimals: 0
+    disabled_by_default: true
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    id: low_pressure
+    name: "Low pressure"
+    register_type: read
+    address: 87
+    value_type: U_WORD
+    unit_of_measurement: "kPa"
+    device_class: pressure
+    state_class: measurement
+    accuracy_decimals: 0
+    disabled_by_default: true
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    id: error_e01_e16
+    name: "Error E01-E16 raw"
+    register_type: read
+    address: 90
+    register_count: 8
+    value_type: U_WORD
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    id: error_e17_e32
+    name: "Error E17-E32 raw"
+    register_type: read
+    address: 91
+    value_type: U_WORD
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    id: error_p01_p16
+    name: "Error P01-P16 raw"
+    register_type: read
+    address: 96
+    value_type: U_WORD
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    id: error_p17_p32
+    name: "Error P17-P32 raw"
+    register_type: read
+    address: 97
+    value_type: U_WORD
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    id: target_operation_mode_raw
+    name: "Target operation mode raw"
+    register_type: read
+    address: 101
+    register_count: 3
+    value_type: U_WORD
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    disabled_by_default: true
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    id: actual_operation_mode_raw
+    name: "Actual operation mode raw"
+    register_type: read
+    address: 103
+    value_type: U_WORD
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    disabled_by_default: true
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    id: hvac_mode_current
+    name: "HVAC mode current raw"
+    register_type: holding
+    address: 2100
+    register_count: 15
+    value_type: U_WORD
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    id: zone_control_current
+    name: "Zone control current raw"
+    register_type: holding
+    address: 2101
+    value_type: U_WORD
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    disabled_by_default: true
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    id: dhw_mode_current
+    name: "DHW mode current raw"
+    register_type: holding
+    address: 2102
+    value_type: U_WORD
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    disabled_by_default: true
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    id: function_a_raw
+    name: "Function A raw"
+    register_type: holding
+    address: 2103
+    value_type: U_WORD
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    disabled_by_default: true
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    id: dhw_setpoint_current
+    name: "DHW setpoint current"
+    register_type: holding
+    address: 2105
+    value_type: S_WORD
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    disabled_by_default: true
+    filters:
+      - multiply: 0.1
+    web_server:
+      sorting_group_id: group_controls
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    id: zone1_heating_setpoint_current
+    name: "Zone 1 heating setpoint current"
+    register_type: holding
+    address: 2107
+    value_type: S_WORD
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+    web_server:
+      sorting_group_id: group_controls
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    id: room_setpoint_current
+    name: "Room setpoint current"
+    register_type: holding
+    address: 2114
+    value_type: S_WORD
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    disabled_by_default: true
+    filters:
+      - multiply: 0.1
+    web_server:
+      sorting_group_id: group_controls
 
   - platform: template
-    id: delta_t
+    id: water_delta_t
     name: "Water delta T"
     unit_of_measurement: "°C"
     device_class: temperature
@@ -567,97 +872,97 @@ sensor:
     accuracy_decimals: 1
     update_interval: ${modbus_update_interval}
     lambda: |-
-      if (isnan(id(supply_water_t7).state) || isnan(id(return_water_t6).state)) {
+      if (isnan(id(outlet_water_temperature).state) || isnan(id(inlet_water_temperature).state)) {
         return NAN;
       }
-      return id(supply_water_t7).state - id(return_water_t6).state;
+      return id(outlet_water_temperature).state - id(inlet_water_temperature).state;
     web_server:
       sorting_group_id: group_temperatures
 
   - platform: template
-    name: "Estimated thermal power"
+    id: heating_power
+    name: "Estimated heating power"
     unit_of_measurement: "kW"
     device_class: power
     state_class: measurement
     accuracy_decimals: 2
     update_interval: ${modbus_update_interval}
     lambda: |-
-      if (isnan(id(water_flow).state) || isnan(id(delta_t).state)) {
+      if (isnan(id(water_flow).state) || isnan(id(water_delta_t).state) || isnan(id(compressor_actual_frequency).state)) {
         return NAN;
       }
-      return id(water_flow).state * id(delta_t).state * 4.186f / 60.0f;
+      if (id(compressor_actual_frequency).state <= 0.0f || id(water_flow).state <= 0.3f || id(water_delta_t).state <= 0.5f) {
+        return 0.0f;
+      }
+      return 1.163f * id(water_flow).state * id(water_delta_t).state;
     web_server:
       sorting_group_id: group_power
 
-  - platform: modbus_controller
-    modbus_controller_id: aurora3
-    name: "Cooling set temperature register"
-    register_type: holding
-    address: 0x0300
-    value_type: S_WORD
-    unit_of_measurement: "°C"
-    device_class: temperature
+  - platform: template
+    id: cooling_power
+    name: "Estimated cooling power"
+    unit_of_measurement: "kW"
+    device_class: power
     state_class: measurement
-    accuracy_decimals: 0
-    entity_category: diagnostic
+    accuracy_decimals: 2
+    update_interval: ${modbus_update_interval}
+    lambda: |-
+      if (isnan(id(water_flow).state) || isnan(id(water_delta_t).state) || isnan(id(compressor_actual_frequency).state)) {
+        return NAN;
+      }
+      if (id(compressor_actual_frequency).state <= 0.0f || id(water_flow).state <= 0.3f || id(water_delta_t).state >= -0.5f) {
+        return 0.0f;
+      }
+      return -1.163f * id(water_flow).state * id(water_delta_t).state;
     web_server:
-      sorting_group_id: group_diagnostics
+      sorting_group_id: group_power
 
-  - platform: modbus_controller
-    modbus_controller_id: aurora3
-    name: "Heating set temperature register"
-    register_type: holding
-    address: 0x0301
-    value_type: S_WORD
-    unit_of_measurement: "°C"
-    device_class: temperature
+  - platform: template
+    id: estimated_electrical_power
+    name: "Estimated electrical power"
+    unit_of_measurement: "kW"
+    device_class: power
     state_class: measurement
-    accuracy_decimals: 0
-    entity_category: diagnostic
+    accuracy_decimals: 2
+    update_interval: ${modbus_update_interval}
+    lambda: |-
+      if (!isnan(id(ac_voltage).state) && !isnan(id(ac_current).state) && id(ac_voltage).state > 0.0f && id(ac_current).state > 0.0f) {
+        return id(ac_voltage).state * id(ac_current).state / 1000.0f;
+      }
+      if (!isnan(id(compressor_actual_frequency).state) && id(compressor_actual_frequency).state > 0.0f) {
+        return ((id(compressor_actual_frequency).state * 50.0f) + 80.0f) / 1000.0f;
+      }
+      return 0.008f;
     web_server:
-      sorting_group_id: group_diagnostics
+      sorting_group_id: group_power
 
-  - platform: modbus_controller
-    modbus_controller_id: aurora3
-    name: "Indoor set temperature register"
-    register_type: holding
-    address: 0x0306
-    value_type: S_WORD
-    unit_of_measurement: "°C"
-    device_class: temperature
+  - platform: template
+    name: "Estimated COP"
     state_class: measurement
-    accuracy_decimals: 0
-    entity_category: diagnostic
+    accuracy_decimals: 2
+    update_interval: ${modbus_update_interval}
+    lambda: |-
+      const float thermal = id(heating_power).state + id(cooling_power).state;
+      if (isnan(thermal) || isnan(id(estimated_electrical_power).state) || thermal <= 0.0f || id(estimated_electrical_power).state <= 0.05f) {
+        return NAN;
+      }
+      return thermal / id(estimated_electrical_power).state;
     web_server:
-      sorting_group_id: group_diagnostics
+      sorting_group_id: group_power
 
 number:
   - platform: modbus_controller
     modbus_controller_id: aurora3
-    name: "Heating water temperature setpoint"
-    address: 0x0301
+    name: "Zone 1 heating setpoint"
+    address: 2107
     value_type: S_WORD
-    min_value: 20
-    max_value: 45
+    min_value: 18
+    max_value: 50
     step: 1
     mode: box
     unit_of_measurement: "°C"
     device_class: temperature
-    use_write_multiple: false
-    web_server:
-      sorting_group_id: group_controls
-
-  - platform: modbus_controller
-    modbus_controller_id: aurora3
-    name: "Cooling water temperature setpoint"
-    address: 0x0300
-    value_type: S_WORD
-    min_value: 7
-    max_value: 25
-    step: 1
-    mode: box
-    unit_of_measurement: "°C"
-    device_class: temperature
+    multiply: 10
     use_write_multiple: false
     disabled_by_default: true
     web_server:
@@ -665,15 +970,33 @@ number:
 
   - platform: modbus_controller
     modbus_controller_id: aurora3
-    name: "Indoor setpoint"
-    address: 0x0306
+    name: "DHW setpoint"
+    address: 2105
+    value_type: S_WORD
+    min_value: 30
+    max_value: 60
+    step: 1
+    mode: box
+    unit_of_measurement: "°C"
+    device_class: temperature
+    multiply: 10
+    use_write_multiple: false
+    disabled_by_default: true
+    web_server:
+      sorting_group_id: group_controls
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    name: "Room temperature setpoint"
+    address: 2114
     value_type: S_WORD
     min_value: 10
-    max_value: 25
+    max_value: 30
     step: 0.5
     mode: box
     unit_of_measurement: "°C"
     device_class: temperature
+    multiply: 10
     use_write_multiple: false
     disabled_by_default: true
     web_server:
@@ -682,100 +1005,43 @@ number:
 select:
   - platform: modbus_controller
     modbus_controller_id: aurora3
-    name: "Operating mode"
-    address: 0x0304
-    value_type: S_WORD
+    name: "HVAC mode"
+    address: 2100
+    value_type: U_WORD
     use_write_multiple: false
+    disabled_by_default: true
     optionsmap:
-      "Cooling": 0
-      "Heating": 1
-      "Domestic hot water": 2
-      "Floor heating": 3
-      "Domestic hot water + cooling": 4
-      "Domestic hot water + heating": 5
-      "Reserve": 6
-      "Domestic hot water + floor heating": 7
+      "Cooling": 1
+      "Heating": 2
+      "Auto": 4
     web_server:
       sorting_group_id: group_controls
 
   - platform: modbus_controller
     modbus_controller_id: aurora3
-    name: "Heat pump power"
-    address: 0x0305
-    value_type: S_WORD
+    name: "Zone control"
+    address: 2101
+    value_type: U_WORD
     use_write_multiple: false
+    disabled_by_default: true
+    optionsmap:
+      "All off": 0
+      "Zone 1 on": 1
+      "Zone 2 on": 2
+      "All zones on": 3
+    web_server:
+      sorting_group_id: group_controls
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3
+    name: "DHW mode"
+    address: 2102
+    value_type: U_WORD
+    use_write_multiple: false
+    disabled_by_default: true
     optionsmap:
       "Off": 0
       "On": 1
-    web_server:
-      sorting_group_id: group_controls
-
-  - platform: modbus_controller
-    modbus_controller_id: aurora3
-    name: "Power mode"
-    address: 0x0307
-    value_type: S_WORD
-    use_write_multiple: false
-    optionsmap:
-      "Standard": 0
-      "High power": 1
-      "Silent": 2
-    web_server:
-      sorting_group_id: group_controls
-
-  - platform: modbus_controller
-    modbus_controller_id: aurora3
-    name: "Heating curve"
-    address: 0x0314
-    value_type: S_WORD
-    use_write_multiple: false
-    disabled_by_default: true
-    optionsmap:
-      "Off": 0
-      "H1": 1
-      "H2": 2
-      "H3": 3
-      "H4": 4
-      "H5": 5
-      "H6": 6
-      "H7": 7
-      "H8": 8
-      "L1": 11
-      "L2": 12
-      "L3": 13
-      "L4": 14
-      "L5": 15
-      "L6": 16
-      "L7": 17
-      "L8": 18
-    web_server:
-      sorting_group_id: group_controls
-
-  - platform: modbus_controller
-    modbus_controller_id: aurora3
-    name: "Cooling curve"
-    address: 0x0313
-    value_type: S_WORD
-    use_write_multiple: false
-    disabled_by_default: true
-    optionsmap:
-      "Off": 0
-      "H1": 1
-      "H2": 2
-      "H3": 3
-      "H4": 4
-      "H5": 5
-      "H6": 6
-      "H7": 7
-      "H8": 8
-      "L1": 11
-      "L2": 12
-      "L3": 13
-      "L4": 14
-      "L5": 15
-      "L6": 16
-      "L7": 17
-      "L8": 18
     web_server:
       sorting_group_id: group_controls
 
@@ -792,16 +1058,41 @@ text_sensor:
     name: "Heat pump status text"
     update_interval: ${modbus_update_interval}
     lambda: |-
-      if (isnan(id(running_status_1).state)) {
+      if (isnan(id(system_status_bits).state)) {
         return std::string("No Modbus data");
       }
-      const uint16_t s1 = (uint16_t) id(running_status_1).state;
-      if (s1 & 0x0008) return std::string("Fault/warning");
-      if (s1 & 0x0100) return std::string("Defrost");
-      if (s1 & 0x4000) return std::string("Running");
-      if (s1 & 0x8000) return std::string("Waiting to start");
-      if (s1 & 0x1000) return std::string("Constant temperature stop");
-      return std::string("Standby");
+      const uint16_t status = (uint16_t) id(system_status_bits).state;
+      const bool oil = status & 0x0001;
+      const bool defrost = status & 0x0002;
+      const bool anti_freeze = status & 0x0004;
+      const bool disinfection = status & 0x0010;
+      const bool compressor = !isnan(id(compressor_actual_frequency).state) && id(compressor_actual_frequency).state > 0.0f;
+      const bool pump = !isnan(id(main_water_pump_status_raw).state) && ((uint16_t) id(main_water_pump_status_raw).state) == 1;
+
+      if (defrost) return std::string("Defrosting");
+      if (oil) return std::string("Oil return");
+      if (anti_freeze) return std::string("Anti-freezing");
+      if (disinfection) return std::string("Disinfection");
+      if (compressor && !isnan(id(water_delta_t).state) && id(water_delta_t).state > 0.5f) return std::string("Heating");
+      if (compressor && !isnan(id(water_delta_t).state) && id(water_delta_t).state < -0.5f) return std::string("Cooling");
+      if (compressor) return std::string("Compressor running");
+      if (pump) return std::string("Pump circulation");
+      return std::string("Idle");
+    web_server:
+      sorting_group_id: group_status
+
+  - platform: template
+    name: "HVAC mode text"
+    update_interval: ${modbus_update_interval}
+    lambda: |-
+      if (isnan(id(hvac_mode_current).state)) {
+        return std::string("No Modbus data");
+      }
+      const uint16_t mode = (uint16_t) id(hvac_mode_current).state;
+      if (mode == 1) return std::string("Cooling");
+      if (mode == 2) return std::string("Heating");
+      if (mode == 4) return std::string("Auto");
+      return std::string("Unknown");
     web_server:
       sorting_group_id: group_status
 
@@ -809,29 +1100,18 @@ text_sensor:
     name: "Heat pump fault summary"
     update_interval: ${modbus_update_interval}
     lambda: |-
-      if (isnan(id(fault_state_1).state) || isnan(id(fault_state_2).state) || isnan(id(fault_state_3).state)) {
+      if (isnan(id(error_e01_e16).state) || isnan(id(error_e17_e32).state) || isnan(id(error_p01_p16).state) || isnan(id(error_p17_p32).state)) {
         return std::string("No Modbus data");
       }
-
-      const uint16_t f1 = (uint16_t) id(fault_state_1).state;
-      const uint16_t f2 = (uint16_t) id(fault_state_2).state;
-      const uint16_t f3 = (uint16_t) id(fault_state_3).state;
-      std::string out;
-
-      auto add = [&out](const char *msg) {
-        if (!out.empty()) out += "; ";
-        out += msg;
-      };
-
-      if (f1 & 0x0004) add("Water flow fault");
-      if (f1 & 0x0008) add("Communication fault");
-      if (f1 & 0x0080) add("Water inlet sensor fault");
-      if (f1 & 0x2000) add("Water outlet sensor fault");
-      if (f1 & 0x8000) add("Excessive delta T difference");
-      if (f2 & 0x8000) add("Low water flow protection");
-      if (f3 & 0x0100) add("Buffer tank sensor fault");
-      if (f3 & 0x0200) add("Main supply water sensor fault");
-
-      return out.empty() ? std::string("No fault bits active") : out;
+      if (id(error_e01_e16).state == 0 && id(error_e17_e32).state == 0 && id(error_p01_p16).state == 0 && id(error_p17_p32).state == 0) {
+        return std::string("No active error bits");
+      }
+      char buffer[96];
+      snprintf(buffer, sizeof(buffer), "E01-E16=%u, E17-E32=%u, P01-P16=%u, P17-P32=%u",
+               (unsigned) id(error_e01_e16).state,
+               (unsigned) id(error_e17_e32).state,
+               (unsigned) id(error_p01_p16).state,
+               (unsigned) id(error_p17_p32).state);
+      return std::string(buffer);
     web_server:
       sorting_group_id: group_status

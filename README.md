@@ -18,7 +18,7 @@ This is an independent community project. It is not affiliated with, endorsed by
 
 ## What This Project Does
 
-- Reads status bits, fault bits, temperatures, water flow, compressor frequency, pressure, current and voltage.
+- Reads status bits, fault bits, temperatures, water flow, compressor frequency, pressure, current, voltage, and estimated live electrical power in watts.
 - Adds a complete active sidecar profile that waits for quiet bus windows and reads one register per request.
 - Exposes limited Home Assistant controls for heating setpoint override, domestic hot water (DHW/SWW) setpoint, room setpoint, HVAC mode, DHW/SWW mode and zone control.
 - Keeps all write controls behind an explicit `Enable write controls` switch.
@@ -126,6 +126,12 @@ The Aurora III controller supports zone 1 and zone 2, but many homes use only zo
 The JÅN module is the authority for the weather-compensation or custom heating curve. The active sidecar exposes the calculated values as `Weather compensation heating target`, `Weather compensation cooling target`, and `Target outlet temperature`.
 
 The writable `Zone 1 heating setpoint override` maps to holding register `2107`. Public community findings and local testing both show that the JÅN module can overwrite this register when weather compensation is active. If you want the heat pump to keep following the custom weather-compensation curve, leave `Enable write controls` off and avoid automations that repeatedly write the zone or room setpoint.
+
+## Electrical Power
+
+The active sidecar exposes `Estimated electrical power` in watts. It is calculated from Modbus input registers `74` and `75` as `AC voltage × AC current`.
+
+This is useful for live dashboards and trend monitoring, but it should be treated as an estimate unless it is verified against a dedicated kWh meter. Without a confirmed real-power register or power-factor value, `V × A` may be closer to apparent power than billing-grade wattage.
 
 ## UART Loopback Test
 

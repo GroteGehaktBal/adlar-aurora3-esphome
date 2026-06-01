@@ -99,9 +99,9 @@ This project uses zero-based Modbus register addresses, matching ESPHome and Hom
 - mode text from holding register `2100`;
 - zone-control text from holding register `2101`;
 - E/P fault summaries from registers `90`, `91`, `96`, and `97`;
-- water temperature delta, estimated thermal power, estimated electrical power, and estimated COP.
+- water temperature delta, estimated thermal power, estimated electrical power in watts, and estimated COP.
 
-Derived power and COP entities are estimates. They should be treated as useful trend indicators until electrical power and flow scaling are confirmed on more installations.
+Derived power and COP entities are estimates. `Estimated electrical power` is calculated as `AC voltage × AC current` from registers `74` and `75`, so it may be apparent power unless a real-power register or power factor is confirmed. Treat these as useful trend indicators until electrical power and flow scaling are confirmed on more installations.
 
 ## Scaling Notes
 

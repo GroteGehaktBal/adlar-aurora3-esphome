@@ -32,7 +32,7 @@
 substitutions:
   name: adlar-aurora3
   friendly_name: Adlar Aurora III
-  firmware_profile: "active-sidecar 1.0.1 - weather-curve aware"
+  firmware_profile: "active-sidecar 1.0.2 - live electrical watts"
 
 esphome:
   name: ${name}
@@ -40,7 +40,7 @@ esphome:
   comment: "Active sidecar Modbus integration for Adlar Aurora III JÅN RS485"
   project:
     name: grotegehaktbal.adlar_aurora3_esphome
-    version: "1.0.1-active-sidecar"
+    version: "1.0.2-active-sidecar"
 
 dashboard_import:
   package_import_url: github://GroteGehaktBal/adlar-aurora3-esphome/adlar_aurora3_xiao_esp32c6_active_sidecar.yaml@main
@@ -1644,14 +1644,14 @@ sensor:
   - platform: template
     id: estimated_electrical_power
     name: "Estimated electrical power"
-    unit_of_measurement: "kW"
+    unit_of_measurement: "W"
     device_class: power
     state_class: measurement
-    accuracy_decimals: 2
+    accuracy_decimals: 0
     update_interval: 10s
     lambda: |-
       if (!isnan(id(ac_voltage).state) && !isnan(id(ac_current).state) && id(ac_voltage).state > 0.0f && id(ac_current).state > 0.0f) {
-        return id(ac_voltage).state * id(ac_current).state / 1000.0f;
+        return id(ac_voltage).state * id(ac_current).state;
       }
       return NAN;
     web_server:
@@ -1664,10 +1664,10 @@ sensor:
     update_interval: 10s
     lambda: |-
       const float thermal = id(estimated_heating_power).state + id(estimated_cooling_power).state;
-      if (isnan(thermal) || isnan(id(estimated_electrical_power).state) || thermal <= 0.0f || id(estimated_electrical_power).state <= 0.05f) {
+      if (isnan(thermal) || isnan(id(estimated_electrical_power).state) || thermal <= 0.0f || id(estimated_electrical_power).state <= 50.0f) {
         return NAN;
       }
-      return thermal / id(estimated_electrical_power).state;
+      return thermal / (id(estimated_electrical_power).state / 1000.0f);
     web_server:
       sorting_group_id: group_power
 

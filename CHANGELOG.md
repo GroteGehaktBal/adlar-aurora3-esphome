@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.2 - 2026-06-02
+
+- Changed the active sidecar `Estimated electrical power` entity to report live electrical power directly in watts.
+- Kept COP calculation consistent by converting the watt reading back to kW internally.
+- Documented that the electrical power value is calculated from AC voltage and AC current, so it is a live estimate unless verified against a dedicated power meter.
+
 ## 1.0.1 - 2026-06-02
 
 - Treated optional temperature sentinel values, such as an uninstalled buffer tank sensor reporting `-50.0 °C`, as unavailable in the active sidecar profile.

@@ -27,7 +27,7 @@ Do not use Home Assistant write controls until at least a few read-only sensors 
 
 If both slave `1` and slave `251` time out with the bring-up firmware, flash `adlar_aurora3_xiao_esp32c6_sniffer.yaml`.
 
-This sniffer profile does not transmit on RS485. It only listens on XIAO `D7/RX` at 9600 8N2 and writes raw received bytes to the ESPHome logs as `[uart_debug]` lines.
+This sniffer profile does not intentionally transmit on RS485. It keeps XIAO `D6/TX` at UART idle-high for automatic-direction boards, listens on XIAO `D7/RX` at 9600 8N2, and writes raw received bytes to the ESPHome logs as `[uart_debug]` lines.
 
 Results:
 

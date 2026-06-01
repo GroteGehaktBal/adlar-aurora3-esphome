@@ -6,11 +6,13 @@
 # - Do not transmit anything onto the RS485 bus.
 # - Listen for existing JÅN/heat-pump traffic at 9600 8N2.
 # - Confirm whether the XIAO + RS485 module can actually see bus bytes.
+# - Keep the RS485 module RXD input at UART idle-high so auto-direction boards
+#   stay in receive mode while sniffing.
 
 substitutions:
   name: adlar-aurora3
   friendly_name: Adlar Aurora III
-  firmware_profile: "sniffer 0.4.0 - passive RX only - 9600 8N2"
+  firmware_profile: "sniffer 0.4.1 - passive RX - TX idle high - 9600 8N2"
 
 esphome:
   name: ${name}
@@ -18,7 +20,7 @@ esphome:
   comment: "Adlar Aurora III JÅN RS485 passive sniffer profile"
   project:
     name: grotegehaktbal.adlar_aurora3_esphome
-    version: "0.4.0-sniffer"
+    version: "0.4.1-sniffer"
 
 dashboard_import:
   package_import_url: github://GroteGehaktBal/adlar-aurora3-esphome/adlar_aurora3_xiao_esp32c6_sniffer.yaml@main
@@ -67,6 +69,7 @@ button:
 
 uart:
   id: uart_rs485_sniffer
+  tx_pin: D6
   rx_pin: D7
   baud_rate: 9600
   data_bits: 8

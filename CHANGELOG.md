@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.1 - 2026-06-01
+
+- Updated the passive sniffer to declare XIAO `D6/TX` so automatic-direction RS485 boards see a stable UART idle-high input while sniffing.
+
 ## 0.4.0 - 2026-06-01
 
 - Added a passive RX-only sniffer firmware for checking whether the XIAO and RS485 transceiver can hear existing JÅN bus traffic.

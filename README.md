@@ -62,7 +62,7 @@ In the local web UI, the bring-up firmware should show `Firmware profile` with `
 
 ## Passive Sniffer Firmware
 
-If the bring-up firmware sends requests but gets no replies, flash `adlar_aurora3_xiao_esp32c6_sniffer.yaml`. It does not transmit anything on RS485. It only listens on XIAO `D7/RX` at 9600 8N2 and logs raw bytes as `[uart_debug]` lines.
+If the bring-up firmware sends requests but gets no replies, flash `adlar_aurora3_xiao_esp32c6_sniffer.yaml`. It does not intentionally transmit anything on RS485. It keeps XIAO `D6/TX` at UART idle-high for automatic-direction boards, listens on `D7/RX` at 9600 8N2, and logs raw bytes as `[uart_debug]` lines.
 
 Use this to confirm whether the XIAO and RS485 module can hear the existing JÅN/heat-pump bus traffic before debugging active Modbus polling.
 

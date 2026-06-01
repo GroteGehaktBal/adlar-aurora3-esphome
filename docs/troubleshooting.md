@@ -8,11 +8,12 @@ Check these first:
 
 1. Confirm the current firmware is really running. The bring-up firmware should show a `Firmware profile` entity with `bring-up 0.3.1 - 9600 8N2 - slave 1 and 251 probe`.
 2. For an XY-485-style board, confirm XIAO `D6/TX` goes to module `RXD` and XIAO `D7/RX` goes to module `TXD`.
-3. Confirm `GND` is connected between the transceiver and JÅN port. If the board has an `E` terminal, verify with a multimeter whether `E` is common with TTL-side `GND/DNG`; if not, add a proper signal-ground connection.
-4. Swap RS485 `A` and `B` at one end only. Many RS485 boards and devices use opposite `A/B` naming.
-5. For an automatic-direction module, keep `flow_control_pin` out of the YAML and leave `D2` disconnected.
-6. If your RS485 module needs manual direction, tie `DE` and `/RE` together, connect them to `D2`, and add `flow_control_pin: D2`.
-7. Try slave ID `1` first. If there is still no response after wiring is confirmed, try `251`, which appears in Aurora III protocol notes.
+3. If that never produces replies, also try the other TTL orientation: XIAO `D6/TX` to module `TXD` and XIAO `D7/RX` to module `RXD`. Some boards label TX/RX from the microcontroller's point of view.
+4. Confirm `GND` is connected between the transceiver and JÅN port. If the board has an `E` terminal, verify with a multimeter whether `E` is common with TTL-side `GND/DNG`; if not, add a proper signal-ground connection.
+5. Swap RS485 `A` and `B` at one end only. Many RS485 boards and devices use opposite `A/B` naming.
+6. For an automatic-direction module, keep `flow_control_pin` out of the YAML and leave `D2` disconnected.
+7. If your RS485 module needs manual direction, tie `DE` and `/RE` together, connect them to `D2`, and add `flow_control_pin: D2`.
+8. Try slave ID `1` first. If there is still no response after wiring is confirmed, try `251`, which appears in Aurora III protocol notes.
 
 Useful LED check for XY-485-style boards:
 

@@ -28,6 +28,15 @@ Wiring for an Uno/Nano using the sketch in `tools/arduino_rs485_sniffer`:
 | `D10` | `TXD` |
 | `D11` | `RXD` |
 
+If probes show `TX` requests but always `RX: no reply`, try the alternative TTL orientation before changing any JÅN wiring:
+
+| Arduino Uno/Nano | RS485 module TTL side |
+| --- | --- |
+| `D10` | `RXD` |
+| `D11` | `TXD` |
+
+This is necessary because different RS485 boards use `TXD/RXD` labels from different points of view.
+
 RS485 side:
 
 | RS485 module | JÅN Modbus port |

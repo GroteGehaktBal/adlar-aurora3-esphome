@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.5 - 2026-06-01
+
+- Documented ambiguous `TXD/RXD` labeling on RS485-to-TTL boards and added the alternate TTL wiring test.
+
 ## 0.6.4 - 2026-06-01
 
 - Added a slow Arduino read-only Modbus slave/register scanner for harder first-contact tests.

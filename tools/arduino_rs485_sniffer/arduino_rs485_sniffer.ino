@@ -9,6 +9,10 @@
     Arduino D10 -> RS485 module TXD
     Arduino D11 -> RS485 module RXD
 
+  If every probe says "no reply", try swapping only the two TTL data wires:
+    Arduino D10 -> RS485 module RXD
+    Arduino D11 -> RS485 module TXD
+
   RS485 side:
     RS485 module A+  -> JAN A
     RS485 module B-  -> JAN B

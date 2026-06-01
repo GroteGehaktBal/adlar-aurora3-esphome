@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.1 - 2026-06-01
+
+- Reworked the passive ESPHome monitor into a stream parser that can extract multiple Modbus RTU frames from one UART debug chunk.
+- Added diagnostic counters for request frames, response frames, unmatched responses, ignored valid frames, and the last observed function/address/raw value.
+- Added short startup logging for the first valid passive frames so wiring and parser behavior can be diagnosed from ESPHome logs.
+
 ## 0.7.0 - 2026-06-01
 
 - Added a passive ESPHome monitor that publishes observed JÅN Modbus values without transmitting requests.

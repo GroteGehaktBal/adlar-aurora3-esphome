@@ -45,7 +45,7 @@ If you need to test whether a MAX485-style board requires 5V, see [docs/5v-rs485
 3. Fill in your WiFi, API and OTA secrets.
 4. Check the wiring in [docs/wiring.md](docs/wiring.md).
 5. For a first safe install on an existing JÅN bus, compile and flash `adlar_aurora3_xiao_esp32c6_passive_monitor.yaml`.
-6. Watch `Passive valid Modbus frames`, `Passive published values`, `Passive ambient temperature`, `Passive outlet water temperature`, `Passive AC voltage`, and `Passive zone 1 heating setpoint current`.
+6. Watch `Passive valid Modbus frames`, `Passive request frames`, `Passive response frames`, `Passive published values`, `Passive ambient temperature`, `Passive outlet water temperature`, `Passive AC voltage`, and `Passive zone 1 heating setpoint current`.
 7. Only move to active polling or write controls after passive data is stable and plausible.
 
 ```bash
@@ -74,9 +74,15 @@ Use this to confirm whether the XIAO and RS485 module can hear the existing JÅN
 
 ## Passive ESPHome Monitor
 
-After the Arduino passive analyzer sees valid request/response pairs, flash `adlar_aurora3_xiao_esp32c6_passive_monitor.yaml`. This profile also listens only: it does not create a Modbus controller and does not transmit requests. It pairs existing JÅN read requests with their responses and publishes the observed values as Home Assistant entities.
+After the Arduino passive analyzer sees valid request/response pairs, flash `adlar_aurora3_xiao_esp32c6_passive_monitor.yaml`. This profile also listens only: it does not create a Modbus controller and does not transmit requests. It parses the existing JÅN bus stream, pairs read requests with their responses, and publishes the observed values as Home Assistant entities.
 
 This is currently the best profile for side-by-side use with the JÅN module because the JÅN/internal controller already owns the Modbus conversation.
+
+If `Passive valid Modbus frames` increases but `Passive published values` stays at zero, check the diagnostic counters:
+
+- `Passive request frames` and `Passive response frames` both increase: the parser sees both sides and should publish once a mapped register appears.
+- `Passive response frames` increases but `Passive request frames` stays at zero: the ESP is only seeing one side of the RS485 conversation, so the response cannot be mapped to a register address yet.
+- `Passive unmatched responses` increases: the ESP sees response frames without the matching request frame.
 
 ## UART Loopback Test
 

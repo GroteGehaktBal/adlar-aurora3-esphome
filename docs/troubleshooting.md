@@ -30,10 +30,17 @@ If the Arduino passive analyzer prints valid request/response pairs, flash `adla
 
 Expected signs:
 
-- `Firmware profile` shows `passive-monitor 0.7.0 - listens only`.
+- `Firmware profile` shows `passive-monitor 0.7.1 - stream parser`.
 - `Passive valid Modbus frames` increases.
+- `Passive request frames` and `Passive response frames` both increase.
 - `Passive published values` increases when known registers are observed.
 - `Passive ambient temperature`, `Passive outlet water temperature`, `Passive AC voltage`, or `Passive zone 1 heating setpoint current` become populated when the JÅN controller polls those registers.
+
+If `Passive valid Modbus frames` increases but `Passive published values` stays at zero:
+
+- If only `Passive response frames` increases, the ESP is seeing valid responses but not the matching requests. A Modbus response does not include the register address, so the firmware cannot safely map it to a Home Assistant entity yet.
+- If only `Passive request frames` increases, the ESP is seeing the JÅN requests but not the heat-pump responses.
+- If both request and response counters increase but `Passive ignored valid frames` also increases, check `Passive last observed address` and the first `passive_modbus` log lines; the register may not be mapped yet.
 
 ## Passive Bus Sniffing
 

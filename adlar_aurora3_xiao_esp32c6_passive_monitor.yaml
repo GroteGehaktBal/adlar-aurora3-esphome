@@ -19,7 +19,7 @@
 substitutions:
   name: adlar-aurora3
   friendly_name: Adlar Aurora III
-  firmware_profile: "passive-monitor 0.7.0 - listens only"
+  firmware_profile: "passive-monitor 0.7.1 - stream parser"
 
 esphome:
   name: ${name}
@@ -27,7 +27,7 @@ esphome:
   comment: "Passive Adlar Aurora III JÅN RS485 Modbus monitor on Seeed Studio XIAO ESP32C6"
   project:
     name: grotegehaktbal.adlar_aurora3_esphome
-    version: "0.7.0-passive-monitor"
+    version: "0.7.1-passive-monitor"
 
 dashboard_import:
   package_import_url: github://GroteGehaktBal/adlar-aurora3-esphome/adlar_aurora3_xiao_esp32c6_passive_monitor.yaml@main
@@ -120,6 +120,46 @@ globals:
     restore_value: no
     initial_value: "0"
 
+  - id: passive_request_frames
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: passive_response_frames
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: passive_unmatched_responses
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: passive_ignored_frames
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: passive_debug_frames_logged
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: passive_last_observed_function
+    type: uint16_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: passive_last_observed_address
+    type: uint16_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: passive_last_observed_raw
+    type: uint16_t
+    restore_value: no
+    initial_value: "0"
+
 uart:
   id: uart_rs485_passive
   tx_pin: D6
@@ -140,10 +180,10 @@ uart:
             return;
           }
 
-          auto crc16 = [](const std::vector<uint8_t> &data, size_t length) -> uint16_t {
+          auto crc16_range = [&](size_t start, size_t length) -> uint16_t {
             uint16_t crc = 0xFFFF;
             for (size_t pos = 0; pos < length; pos++) {
-              crc ^= (uint16_t) data[pos];
+              crc ^= (uint16_t) bytes[start + pos];
               for (uint8_t i = 0; i < 8; i++) {
                 if ((crc & 0x0001) != 0) {
                   crc >>= 1;
@@ -160,124 +200,226 @@ uart:
             return ((uint16_t) data[index] << 8) | data[index + 1];
           };
 
-          const uint16_t expected_crc = crc16(bytes, bytes.size() - 2);
-          const uint16_t actual_crc = (uint16_t) bytes[bytes.size() - 2] |
-                                      ((uint16_t) bytes[bytes.size() - 1] << 8);
-          if (expected_crc != actual_crc) {
-            return;
-          }
-
-          id(passive_valid_frames) += 1;
-
-          const uint8_t slave = bytes[0];
-          const uint8_t function = bytes[1];
-          char message[96];
-
-          if ((function == 0x03 || function == 0x04) && bytes.size() == 8) {
-            id(last_request_slave) = slave;
-            id(last_request_function) = function;
-            id(last_request_address) = word_at(bytes, 2);
-            id(last_request_count) = word_at(bytes, 4);
-            snprintf(message, sizeof(message), "request slave %u fc %u addr %u count %u",
-                     slave, function, id(last_request_address), id(last_request_count));
-            id(passive_last_frame).publish_state(message);
-            return;
-          }
-
-          if ((function == 0x03 || function == 0x04) && bytes.size() >= 7) {
-            const uint8_t byte_count = bytes[2];
-            if (bytes.size() != (size_t) byte_count + 5) {
-              return;
+          auto has_valid_crc = [&](size_t start, size_t length) -> bool {
+            if (length < 5 || start + length > bytes.size()) {
+              return false;
             }
-            if (slave != id(last_request_slave) ||
-                function != id(last_request_function) ||
-                id(last_request_count) != 1 ||
-                byte_count < 2) {
-              return;
-            }
+            const uint16_t expected_crc = crc16_range(start, length - 2);
+            const uint16_t actual_crc = (uint16_t) bytes[start + length - 2] |
+                                        ((uint16_t) bytes[start + length - 1] << 8);
+            return expected_crc == actual_crc;
+          };
 
-            const uint16_t address = id(last_request_address);
-            const uint16_t raw = word_at(bytes, 3);
+          auto publish_value = [](uint8_t function, uint16_t address, uint16_t raw) -> bool {
             const int16_t signed_raw = (int16_t) raw;
-            bool published = true;
 
             if (function == 0x04) {
               switch (address) {
                 case 40:
                   id(passive_room_temperature).publish_state(signed_raw * 0.1f);
-                  break;
+                  return true;
                 case 42:
                   id(passive_inlet_water_temperature).publish_state(signed_raw * 0.1f);
-                  break;
+                  return true;
                 case 43:
                   id(passive_outlet_water_temperature).publish_state(signed_raw * 0.1f);
-                  break;
+                  return true;
                 case 50:
                   id(passive_ambient_temperature).publish_state(signed_raw * 0.1f);
-                  break;
+                  return true;
                 case 63:
                   id(passive_pump_pwm_feedback).publish_state(raw);
-                  break;
+                  return true;
                 case 64:
                   id(passive_water_flow).publish_state(raw * 0.1f);
-                  break;
+                  return true;
                 case 66:
                   id(passive_climate_curve_cooling_set).publish_state(signed_raw * 0.1f);
-                  break;
+                  return true;
                 case 67:
                   id(passive_climate_curve_heating_set).publish_state(signed_raw * 0.1f);
-                  break;
+                  return true;
                 case 73:
                   id(passive_observed_input_73_raw).publish_state(raw);
-                  break;
+                  return true;
                 case 74:
                   id(passive_ac_voltage).publish_state(raw);
-                  break;
+                  return true;
                 case 79:
                   id(passive_compressor_actual_frequency).publish_state(raw);
-                  break;
+                  return true;
                 case 83:
                   id(passive_observed_input_83_raw).publish_state(raw);
-                  break;
+                  return true;
                 case 90:
                   id(passive_error_e01_e16).publish_state(raw);
-                  break;
+                  return true;
                 case 92:
                   id(passive_observed_input_92_raw).publish_state(raw);
-                  break;
+                  return true;
                 case 97:
                   id(passive_error_p17_p32).publish_state(raw);
-                  break;
+                  return true;
                 default:
-                  published = false;
-                  break;
+                  return false;
               }
-            } else if (function == 0x03) {
+            }
+
+            if (function == 0x03) {
               switch (address) {
                 case 2100:
                   id(passive_hvac_mode_current).publish_state(raw);
-                  break;
+                  return true;
                 case 2107:
                   id(passive_zone1_heating_setpoint_current).publish_state(signed_raw * 0.1f);
-                  break;
+                  return true;
                 case 6035:
                   id(passive_observed_holding_6035_raw).publish_state(raw);
-                  break;
+                  return true;
                 default:
-                  published = false;
-                  break;
+                  return false;
               }
             }
 
-            snprintf(message, sizeof(message), "response slave %u fc %u addr %u raw %u",
-                     slave, function, address, raw);
-            id(passive_last_frame).publish_state(message);
+            return false;
+          };
 
-            if (published) {
-              id(passive_published_values) += 1;
-              snprintf(message, sizeof(message), "published addr %u raw %u", address, raw);
-              id(passive_status).publish_state(message);
+          auto debug_log = [&](const char *kind, uint8_t slave, uint8_t function, uint16_t address, uint16_t value) {
+            if (id(passive_debug_frames_logged) >= 80) {
+              return;
             }
+            ESP_LOGI("passive_modbus", "%s slave=%u fc=%u addr=%u value=%u",
+                     kind, slave, function, address, value);
+            id(passive_debug_frames_logged) += 1;
+          };
+
+          auto process_frame = [&](const std::vector<uint8_t> &frame) {
+            id(passive_valid_frames) += 1;
+
+            const uint8_t slave = frame[0];
+            const uint8_t function = frame[1];
+            char message[128];
+
+            id(passive_last_observed_function) = function;
+
+            if ((function == 0x03 || function == 0x04) && frame.size() == 8) {
+              const uint16_t address = word_at(frame, 2);
+              const uint16_t count = word_at(frame, 4);
+              id(passive_request_frames) += 1;
+              id(last_request_slave) = slave;
+              id(last_request_function) = function;
+              id(last_request_address) = address;
+              id(last_request_count) = count;
+              id(passive_last_observed_address) = address;
+              id(passive_last_observed_raw) = count;
+              snprintf(message, sizeof(message), "request slave %u fc %u addr %u count %u",
+                       slave, function, address, count);
+              id(passive_last_frame).publish_state(message);
+              id(passive_status).publish_state("request seen, waiting for matching response");
+              debug_log("request", slave, function, address, count);
+              return;
+            }
+
+            if ((function == 0x03 || function == 0x04) && frame.size() >= 7) {
+              const uint8_t byte_count = frame[2];
+              if (frame.size() != (size_t) byte_count + 5 || byte_count < 2) {
+                id(passive_ignored_frames) += 1;
+                snprintf(message, sizeof(message), "ignored malformed response slave %u fc %u len %u",
+                         slave, function, (unsigned) frame.size());
+                id(passive_last_frame).publish_state(message);
+                debug_log("ignored-malformed", slave, function, 0, frame.size());
+                return;
+              }
+
+              id(passive_response_frames) += 1;
+              const uint16_t raw = word_at(frame, 3);
+              id(passive_last_observed_raw) = raw;
+
+              const bool matched_request = slave == id(last_request_slave) &&
+                                           function == id(last_request_function) &&
+                                           id(last_request_count) == 1;
+
+              if (!matched_request) {
+                id(passive_unmatched_responses) += 1;
+                id(passive_last_observed_address) = 0;
+                snprintf(message, sizeof(message), "response slave %u fc %u raw %u without matching request",
+                         slave, function, raw);
+                id(passive_last_frame).publish_state(message);
+                id(passive_status).publish_state("response seen without matching request");
+                debug_log("response-unmatched", slave, function, 0, raw);
+                return;
+              }
+
+              const uint16_t address = id(last_request_address);
+              id(last_request_count) = 0;
+              id(passive_last_observed_address) = address;
+              snprintf(message, sizeof(message), "response slave %u fc %u addr %u raw %u",
+                       slave, function, address, raw);
+              id(passive_last_frame).publish_state(message);
+
+              if (publish_value(function, address, raw)) {
+                id(passive_published_values) += 1;
+                snprintf(message, sizeof(message), "published addr %u raw %u", address, raw);
+                id(passive_status).publish_state(message);
+                debug_log("published", slave, function, address, raw);
+              } else {
+                id(passive_ignored_frames) += 1;
+                snprintf(message, sizeof(message), "valid addr %u raw %u, no entity mapped", address, raw);
+                id(passive_status).publish_state(message);
+                debug_log("unmapped", slave, function, address, raw);
+              }
+              return;
+            }
+
+            id(passive_ignored_frames) += 1;
+            snprintf(message, sizeof(message), "ignored valid frame slave %u fc %u len %u",
+                     slave, function, (unsigned) frame.size());
+            id(passive_last_frame).publish_state(message);
+            id(passive_status).publish_state("valid frame seen, but function is not mapped");
+            debug_log("ignored", slave, function, 0, frame.size());
+          };
+
+          bool parsed_any = false;
+          size_t offset = 0;
+          while (offset + 5 <= bytes.size()) {
+            const uint8_t function = bytes[offset + 1];
+            bool parsed = false;
+
+            if ((function == 0x03 || function == 0x04) && offset + 5 <= bytes.size()) {
+              const uint8_t byte_count = bytes[offset + 2];
+              const size_t response_length = (size_t) byte_count + 5;
+              if (byte_count > 0 &&
+                  byte_count <= 240 &&
+                  offset + response_length <= bytes.size() &&
+                  has_valid_crc(offset, response_length)) {
+                std::vector<uint8_t> frame(bytes.begin() + offset,
+                                           bytes.begin() + offset + response_length);
+                process_frame(frame);
+                offset += response_length;
+                parsed_any = true;
+                parsed = true;
+              }
+            }
+
+            if (!parsed &&
+                (function == 0x03 || function == 0x04) &&
+                offset + 8 <= bytes.size() &&
+                has_valid_crc(offset, 8)) {
+              std::vector<uint8_t> frame(bytes.begin() + offset, bytes.begin() + offset + 8);
+              process_frame(frame);
+              offset += 8;
+              parsed_any = true;
+              parsed = true;
+            }
+
+            if (!parsed) {
+              offset += 1;
+            }
+          }
+
+          if (!parsed_any && has_valid_crc(0, bytes.size())) {
+            std::vector<uint8_t> frame(bytes.begin(), bytes.end());
+            process_frame(frame);
           }
 
 binary_sensor:
@@ -319,6 +461,83 @@ sensor:
     lambda: |-
       return id(passive_published_values);
     update_interval: 30s
+    web_server:
+      sorting_group_id: group_passive
+
+  - platform: template
+    id: passive_request_frame_count
+    name: "Passive request frames"
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    lambda: |-
+      return id(passive_request_frames);
+    update_interval: 30s
+    web_server:
+      sorting_group_id: group_passive
+
+  - platform: template
+    id: passive_response_frame_count
+    name: "Passive response frames"
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    lambda: |-
+      return id(passive_response_frames);
+    update_interval: 30s
+    web_server:
+      sorting_group_id: group_passive
+
+  - platform: template
+    id: passive_unmatched_response_count
+    name: "Passive unmatched responses"
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    lambda: |-
+      return id(passive_unmatched_responses);
+    update_interval: 30s
+    web_server:
+      sorting_group_id: group_passive
+
+  - platform: template
+    id: passive_ignored_frame_count
+    name: "Passive ignored valid frames"
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    lambda: |-
+      return id(passive_ignored_frames);
+    update_interval: 30s
+    web_server:
+      sorting_group_id: group_passive
+
+  - platform: template
+    id: passive_last_observed_function_sensor
+    name: "Passive last observed function"
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    lambda: |-
+      return id(passive_last_observed_function);
+    update_interval: 10s
+    web_server:
+      sorting_group_id: group_passive
+
+  - platform: template
+    id: passive_last_observed_address_sensor
+    name: "Passive last observed address"
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    lambda: |-
+      return id(passive_last_observed_address);
+    update_interval: 10s
+    web_server:
+      sorting_group_id: group_passive
+
+  - platform: template
+    id: passive_last_observed_raw_sensor
+    name: "Passive last observed raw value"
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    lambda: |-
+      return id(passive_last_observed_raw);
+    update_interval: 10s
     web_server:
       sorting_group_id: group_passive
 

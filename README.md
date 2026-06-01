@@ -84,6 +84,12 @@ If `Passive valid Modbus frames` increases but `Passive published values` stays 
 - `Passive response frames` increases but `Passive request frames` stays at zero: the ESP is only seeing one side of the RS485 conversation, so the response cannot be mapped to a register address yet.
 - `Passive unmatched responses` increases: the ESP sees response frames without the matching request frame.
 
+## Active Read Probe Firmware
+
+If the passive monitor sees only response frames, flash `adlar_aurora3_xiao_esp32c6_active_probe.yaml` before trying the full active profile. This firmware sends only slow read-only Modbus requests and waits for a quiet bus before each request. It never writes setpoints or modes.
+
+Watch `Active probe requests sent`, `Active probe replies`, `Active probe timeouts`, and `Active probe bus busy skips`. If replies increase and the temperature/voltage entities populate, the XIAO can actively read the heat pump and the full active profile can be tested carefully later.
+
 ## UART Loopback Test
 
 If the sniffer logs no RX bytes, flash `adlar_aurora3_xiao_esp32c6_uart_loopback.yaml`. Disconnect the RS485 module, temporarily short XIAO `D6` to XIAO `D7`, and watch the logs. Matching `[uart_debug]` TX and RX lines prove the ESPHome UART pins are working before replacing or retesting the RS485 transceiver.
@@ -133,6 +139,7 @@ See [docs/troubleshooting.md](docs/troubleshooting.md) for symptoms such as CRC 
 | --- | --- |
 | `adlar_aurora3_xiao_esp32c6.yaml` | Main ESPHome configuration |
 | `adlar_aurora3_xiao_esp32c6_passive_monitor.yaml` | Passive ESPHome monitor that publishes observed JÅN bus values without transmitting |
+| `adlar_aurora3_xiao_esp32c6_active_probe.yaml` | Slow read-only active probe for cases where passive monitoring sees only responses |
 | `adlar_aurora3_xiao_esp32c6_bringup.yaml` | Minimal one-register-per-minute first-contact firmware |
 | `adlar_aurora3_xiao_esp32c6_sniffer.yaml` | Passive RS485 receive-only sniffer firmware |
 | `adlar_aurora3_xiao_esp32c6_uart_loopback.yaml` | Local XIAO D6/D7 UART loopback test firmware |

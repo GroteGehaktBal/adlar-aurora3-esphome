@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.0 - 2026-06-01
+
+- Added a slow read-only active probe firmware for installations where passive monitoring sees valid response frames but not the matching request frames.
+- The active probe waits for a quiet bus before transmitting and reads only known telemetry/control-status registers; it does not write setpoints or modes.
+
 ## 0.7.1 - 2026-06-01
 
 - Reworked the passive ESPHome monitor into a stream parser that can extract multiple Modbus RTU frames from one UART debug chunk.

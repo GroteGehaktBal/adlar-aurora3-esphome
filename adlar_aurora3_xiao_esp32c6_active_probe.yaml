@@ -1,0 +1,687 @@
+---
+# Read-only active Modbus probe for an Adlar Aurora III / JÅN RS485 bus.
+#
+# This profile is the next step after the passive monitor shows valid responses
+# but no request frames. It sends one very slow read-only Modbus request only
+# after the bus has been quiet for a short period, then maps the immediate
+# response to the register it just requested.
+#
+# It does not write setpoints or modes.
+#
+# Tested XY-485 TTL wiring:
+#   XIAO D6/TX -> RS485 module TXD
+#   XIAO D7/RX -> RS485 module RXD
+#   XIAO 3V3   -> RS485 module VCC
+#   XIAO GND   -> RS485 module GND/DNG
+#
+# RS485 side:
+#   RS485 A+   -> JÅN A
+#   RS485 B-   -> JÅN B
+#   RS485 GND  -> JÅN GND
+
+substitutions:
+  name: adlar-aurora3
+  friendly_name: Adlar Aurora III
+  firmware_profile: "active-probe 0.8.0 - slow read-only"
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+  comment: "Slow read-only active Modbus probe for Adlar Aurora III JÅN RS485"
+  project:
+    name: grotegehaktbal.adlar_aurora3_esphome
+    version: "0.8.0-active-probe"
+
+dashboard_import:
+  package_import_url: github://GroteGehaktBal/adlar-aurora3-esphome/adlar_aurora3_xiao_esp32c6_active_probe.yaml@main
+  import_full_config: true
+
+esp32:
+  board: seeed_xiao_esp32c6
+  variant: esp32c6
+  framework:
+    type: esp-idf
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  min_auth_mode: WPA2
+  ap:
+    ssid: "${friendly_name} fallback"
+    password: !secret fallback_ap_password
+
+captive_portal:
+
+api:
+  encryption:
+    key: !secret api_encryption_key
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+logger:
+  level: INFO
+  baud_rate: 0
+
+web_server:
+  port: 80
+  version: 3
+  sorting_groups:
+    - id: group_probe
+      name: Active Probe
+      sorting_weight: 5
+    - id: group_temperatures
+      name: Temperatures
+      sorting_weight: 10
+    - id: group_hydraulics
+      name: Hydraulics
+      sorting_weight: 20
+    - id: group_power
+      name: Power
+      sorting_weight: 30
+    - id: group_status
+      name: Status
+      sorting_weight: 40
+    - id: group_diagnostics
+      name: Diagnostics
+      sorting_weight: 90
+
+button:
+  - platform: restart
+    name: "Restart ESP"
+    entity_category: diagnostic
+
+switch:
+  - platform: template
+    id: active_probe_enabled
+    name: "Active read probe enabled"
+    icon: "mdi:radar"
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    web_server:
+      sorting_group_id: group_probe
+
+globals:
+  - id: last_rx_seen_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: outstanding_function
+    type: uint8_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: outstanding_address
+    type: uint16_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: outstanding_sent_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: active_probe_index
+    type: uint8_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: active_probe_requests
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: active_probe_replies
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: active_probe_timeouts
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: active_probe_bus_busy_skips
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: active_probe_passive_frames
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: active_probe_last_function
+    type: uint16_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: active_probe_last_address
+    type: uint16_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: active_probe_last_raw
+    type: uint16_t
+    restore_value: no
+    initial_value: "0"
+
+uart:
+  id: uart_rs485_active_probe
+  tx_pin: D6
+  rx_pin: D7
+  baud_rate: 9600
+  data_bits: 8
+  parity: NONE
+  stop_bits: 2
+  rx_buffer_size: 1024
+  debug:
+    direction: RX
+    dummy_receiver: true
+    after:
+      timeout: 6ms
+    sequence:
+      - lambda: |-
+          if (bytes.size() < 5) {
+            return;
+          }
+
+          id(last_rx_seen_ms) = millis();
+
+          auto crc16_range = [&](size_t start, size_t length) -> uint16_t {
+            uint16_t crc = 0xFFFF;
+            for (size_t pos = 0; pos < length; pos++) {
+              crc ^= (uint16_t) bytes[start + pos];
+              for (uint8_t i = 0; i < 8; i++) {
+                if ((crc & 0x0001) != 0) {
+                  crc >>= 1;
+                  crc ^= 0xA001;
+                } else {
+                  crc >>= 1;
+                }
+              }
+            }
+            return crc;
+          };
+
+          auto word_at = [](const std::vector<uint8_t> &data, size_t index) -> uint16_t {
+            return ((uint16_t) data[index] << 8) | data[index + 1];
+          };
+
+          auto has_valid_crc = [&](size_t start, size_t length) -> bool {
+            if (length < 5 || start + length > bytes.size()) {
+              return false;
+            }
+            const uint16_t expected_crc = crc16_range(start, length - 2);
+            const uint16_t actual_crc = (uint16_t) bytes[start + length - 2] |
+                                        ((uint16_t) bytes[start + length - 1] << 8);
+            return expected_crc == actual_crc;
+          };
+
+          auto publish_probe_value = [](uint8_t function, uint16_t address, uint16_t raw) -> bool {
+            const int16_t signed_raw = (int16_t) raw;
+
+            if (function == 0x04) {
+              switch (address) {
+                case 42:
+                  id(active_probe_inlet_water_temperature).publish_state(signed_raw * 0.1f);
+                  return true;
+                case 43:
+                  id(active_probe_outlet_water_temperature).publish_state(signed_raw * 0.1f);
+                  return true;
+                case 50:
+                  id(active_probe_ambient_temperature).publish_state(signed_raw * 0.1f);
+                  return true;
+                case 64:
+                  id(active_probe_water_flow).publish_state(raw * 0.1f);
+                  return true;
+                case 74:
+                  id(active_probe_ac_voltage).publish_state(raw);
+                  return true;
+                case 79:
+                  id(active_probe_compressor_actual_frequency).publish_state(raw);
+                  return true;
+                case 90:
+                  id(active_probe_error_e01_e16).publish_state(raw);
+                  return true;
+                case 97:
+                  id(active_probe_error_p17_p32).publish_state(raw);
+                  return true;
+                default:
+                  return false;
+              }
+            }
+
+            if (function == 0x03) {
+              switch (address) {
+                case 2100:
+                  id(active_probe_hvac_mode_current).publish_state(raw);
+                  return true;
+                case 2107:
+                  id(active_probe_zone1_heating_setpoint_current).publish_state(signed_raw * 0.1f);
+                  return true;
+                default:
+                  return false;
+              }
+            }
+
+            return false;
+          };
+
+          auto process_frame = [&](const std::vector<uint8_t> &frame) {
+            const uint8_t slave = frame[0];
+            const uint8_t function = frame[1];
+            char message[128];
+
+            if ((function == 0x03 || function == 0x04) && frame.size() == 8) {
+              id(active_probe_passive_frames) += 1;
+              snprintf(message, sizeof(message), "passive request seen slave %u fc %u addr %u",
+                       slave, function, word_at(frame, 2));
+              id(active_probe_last_frame).publish_state(message);
+              return;
+            }
+
+            if ((function != 0x03 && function != 0x04) || frame.size() < 7) {
+              id(active_probe_passive_frames) += 1;
+              return;
+            }
+
+            const uint8_t byte_count = frame[2];
+            if (frame.size() != (size_t) byte_count + 5 || byte_count < 2) {
+              id(active_probe_passive_frames) += 1;
+              return;
+            }
+
+            const uint16_t raw = word_at(frame, 3);
+            const uint32_t age_ms = millis() - id(outstanding_sent_ms);
+            const bool is_our_reply = slave == 1 &&
+                                      function == id(outstanding_function) &&
+                                      id(outstanding_function) != 0 &&
+                                      age_ms <= 800;
+
+            if (!is_our_reply) {
+              id(active_probe_passive_frames) += 1;
+              return;
+            }
+
+            const uint16_t address = id(outstanding_address);
+            id(outstanding_function) = 0;
+            id(active_probe_replies) += 1;
+            id(active_probe_last_function) = function;
+            id(active_probe_last_address) = address;
+            id(active_probe_last_raw) = raw;
+
+            snprintf(message, sizeof(message), "reply slave %u fc %u addr %u raw %u age %u ms",
+                     slave, function, address, raw, (unsigned) age_ms);
+            id(active_probe_last_frame).publish_state(message);
+
+            if (publish_probe_value(function, address, raw)) {
+              snprintf(message, sizeof(message), "published addr %u raw %u", address, raw);
+              id(active_probe_status).publish_state(message);
+              ESP_LOGI("active_probe", "%s", message);
+            } else {
+              snprintf(message, sizeof(message), "reply addr %u raw %u has no mapped entity", address, raw);
+              id(active_probe_status).publish_state(message);
+              ESP_LOGI("active_probe", "%s", message);
+            }
+          };
+
+          size_t offset = 0;
+          while (offset + 5 <= bytes.size()) {
+            const uint8_t function = bytes[offset + 1];
+            bool parsed = false;
+
+            if ((function == 0x03 || function == 0x04) && offset + 5 <= bytes.size()) {
+              const uint8_t byte_count = bytes[offset + 2];
+              const size_t response_length = (size_t) byte_count + 5;
+              if (byte_count > 0 &&
+                  byte_count <= 240 &&
+                  offset + response_length <= bytes.size() &&
+                  has_valid_crc(offset, response_length)) {
+                std::vector<uint8_t> frame(bytes.begin() + offset,
+                                           bytes.begin() + offset + response_length);
+                process_frame(frame);
+                offset += response_length;
+                parsed = true;
+              }
+            }
+
+            if (!parsed &&
+                (function == 0x03 || function == 0x04) &&
+                offset + 8 <= bytes.size() &&
+                has_valid_crc(offset, 8)) {
+              std::vector<uint8_t> frame(bytes.begin() + offset, bytes.begin() + offset + 8);
+              process_frame(frame);
+              offset += 8;
+              parsed = true;
+            }
+
+            if (!parsed) {
+              offset += 1;
+            }
+          }
+
+interval:
+  - interval: 10s
+    then:
+      - lambda: |-
+          if (!id(active_probe_enabled).state) {
+            id(active_probe_status).publish_state("active probe disabled");
+            return;
+          }
+
+          const uint32_t now = millis();
+
+          if (id(outstanding_function) != 0) {
+            const uint32_t age_ms = now - id(outstanding_sent_ms);
+            if (age_ms > 1200) {
+              id(active_probe_timeouts) += 1;
+              char message[96];
+              snprintf(message, sizeof(message), "timeout fc %u addr %u after %u ms",
+                       id(outstanding_function), id(outstanding_address), (unsigned) age_ms);
+              id(active_probe_status).publish_state(message);
+              ESP_LOGW("active_probe", "%s", message);
+              id(outstanding_function) = 0;
+            }
+            return;
+          }
+
+          if (id(last_rx_seen_ms) != 0 && now - id(last_rx_seen_ms) < 2500) {
+            id(active_probe_bus_busy_skips) += 1;
+            id(active_probe_status).publish_state("waiting for quiet bus before sending");
+            return;
+          }
+
+          struct Probe {
+            uint8_t function;
+            uint16_t address;
+          };
+
+          const Probe probes[] = {
+            {0x04, 50},    // Ambient temperature
+            {0x04, 43},    // Outlet water temperature
+            {0x04, 42},    // Inlet water temperature
+            {0x04, 64},    // Water flow
+            {0x04, 74},    // AC voltage
+            {0x04, 79},    // Compressor actual frequency
+            {0x04, 90},    // Error E01-E16 raw
+            {0x04, 97},    // Error P17-P32 raw
+            {0x03, 2100},  // HVAC mode current raw
+            {0x03, 2107},  // Zone 1 heating setpoint
+          };
+
+          const size_t probe_count = sizeof(probes) / sizeof(probes[0]);
+          const Probe probe = probes[id(active_probe_index) % probe_count];
+          id(active_probe_index) = (id(active_probe_index) + 1) % probe_count;
+
+          std::vector<uint8_t> frame = {
+            0x01,
+            probe.function,
+            (uint8_t) (probe.address >> 8),
+            (uint8_t) (probe.address & 0xFF),
+            0x00,
+            0x01,
+            0x00,
+            0x00,
+          };
+
+          uint16_t crc = 0xFFFF;
+          for (size_t pos = 0; pos < 6; pos++) {
+            crc ^= (uint16_t) frame[pos];
+            for (uint8_t i = 0; i < 8; i++) {
+              if ((crc & 0x0001) != 0) {
+                crc >>= 1;
+                crc ^= 0xA001;
+              } else {
+                crc >>= 1;
+              }
+            }
+          }
+          frame[6] = (uint8_t) (crc & 0xFF);
+          frame[7] = (uint8_t) (crc >> 8);
+
+          id(outstanding_function) = probe.function;
+          id(outstanding_address) = probe.address;
+          id(outstanding_sent_ms) = now;
+          id(active_probe_requests) += 1;
+          id(active_probe_last_function) = probe.function;
+          id(active_probe_last_address) = probe.address;
+
+          id(uart_rs485_active_probe).write_array(frame.data(), frame.size());
+
+          char message[96];
+          snprintf(message, sizeof(message), "sent read slave 1 fc %u addr %u",
+                   probe.function, probe.address);
+          id(active_probe_status).publish_state(message);
+          id(active_probe_last_frame).publish_state(message);
+          ESP_LOGI("active_probe", "%s", message);
+
+binary_sensor:
+  - platform: status
+    name: "ESP online"
+    entity_category: diagnostic
+
+sensor:
+  - platform: wifi_signal
+    name: "ESP WiFi signal"
+    update_interval: 60s
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: uptime
+    name: "ESP uptime"
+    update_interval: 60s
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: template
+    name: "Active probe requests sent"
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    lambda: |-
+      return id(active_probe_requests);
+    update_interval: 10s
+    web_server:
+      sorting_group_id: group_probe
+
+  - platform: template
+    name: "Active probe replies"
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    lambda: |-
+      return id(active_probe_replies);
+    update_interval: 10s
+    web_server:
+      sorting_group_id: group_probe
+
+  - platform: template
+    name: "Active probe timeouts"
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    lambda: |-
+      return id(active_probe_timeouts);
+    update_interval: 10s
+    web_server:
+      sorting_group_id: group_probe
+
+  - platform: template
+    name: "Active probe bus busy skips"
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    lambda: |-
+      return id(active_probe_bus_busy_skips);
+    update_interval: 10s
+    web_server:
+      sorting_group_id: group_probe
+
+  - platform: template
+    name: "Active probe passive frames seen"
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    lambda: |-
+      return id(active_probe_passive_frames);
+    update_interval: 10s
+    web_server:
+      sorting_group_id: group_probe
+
+  - platform: template
+    name: "Active probe last function"
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    lambda: |-
+      return id(active_probe_last_function);
+    update_interval: 10s
+    web_server:
+      sorting_group_id: group_probe
+
+  - platform: template
+    name: "Active probe last address"
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    lambda: |-
+      return id(active_probe_last_address);
+    update_interval: 10s
+    web_server:
+      sorting_group_id: group_probe
+
+  - platform: template
+    name: "Active probe last raw value"
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    lambda: |-
+      return id(active_probe_last_raw);
+    update_interval: 10s
+    web_server:
+      sorting_group_id: group_probe
+
+  - platform: template
+    id: active_probe_ambient_temperature
+    name: "Active probe ambient temperature"
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    web_server:
+      sorting_group_id: group_temperatures
+
+  - platform: template
+    id: active_probe_inlet_water_temperature
+    name: "Active probe inlet water temperature"
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    web_server:
+      sorting_group_id: group_temperatures
+
+  - platform: template
+    id: active_probe_outlet_water_temperature
+    name: "Active probe outlet water temperature"
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    web_server:
+      sorting_group_id: group_temperatures
+
+  - platform: template
+    id: active_probe_water_flow
+    name: "Active probe water flow"
+    unit_of_measurement: "m³/h"
+    device_class: volume_flow_rate
+    state_class: measurement
+    accuracy_decimals: 1
+    web_server:
+      sorting_group_id: group_hydraulics
+
+  - platform: template
+    id: active_probe_ac_voltage
+    name: "Active probe AC voltage"
+    unit_of_measurement: "V"
+    device_class: voltage
+    state_class: measurement
+    accuracy_decimals: 0
+    web_server:
+      sorting_group_id: group_power
+
+  - platform: template
+    id: active_probe_compressor_actual_frequency
+    name: "Active probe compressor actual frequency"
+    unit_of_measurement: "Hz"
+    state_class: measurement
+    accuracy_decimals: 0
+    web_server:
+      sorting_group_id: group_status
+
+  - platform: template
+    id: active_probe_error_e01_e16
+    name: "Active probe error E01-E16 raw"
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: template
+    id: active_probe_error_p17_p32
+    name: "Active probe error P17-P32 raw"
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: template
+    id: active_probe_hvac_mode_current
+    name: "Active probe HVAC mode current raw"
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_status
+
+  - platform: template
+    id: active_probe_zone1_heating_setpoint_current
+    name: "Active probe zone 1 heating setpoint current"
+    unit_of_measurement: "°C"
+    device_class: temperature
+    accuracy_decimals: 1
+    web_server:
+      sorting_group_id: group_status
+
+text_sensor:
+  - platform: wifi_info
+    ip_address:
+      name: "ESP IP"
+      entity_category: diagnostic
+      web_server:
+        sorting_group_id: group_diagnostics
+    ssid:
+      name: "ESP WiFi SSID"
+      entity_category: diagnostic
+      web_server:
+        sorting_group_id: group_diagnostics
+
+  - platform: template
+    name: "Firmware profile"
+    entity_category: diagnostic
+    update_interval: 60s
+    lambda: |-
+      return std::string("${firmware_profile}");
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: template
+    id: active_probe_status
+    name: "Active probe status"
+    update_interval: never
+    web_server:
+      sorting_group_id: group_probe
+
+  - platform: template
+    id: active_probe_last_frame
+    name: "Active probe last frame"
+    update_interval: never
+    web_server:
+      sorting_group_id: group_probe

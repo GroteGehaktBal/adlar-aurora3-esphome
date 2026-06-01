@@ -42,6 +42,16 @@ If `Passive valid Modbus frames` increases but `Passive published values` stays 
 - If only `Passive request frames` increases, the ESP is seeing the JÅN requests but not the heat-pump responses.
 - If both request and response counters increase but `Passive ignored valid frames` also increases, check `Passive last observed address` and the first `passive_modbus` log lines; the register may not be mapped yet.
 
+If the passive monitor only sees responses, try `adlar_aurora3_xiao_esp32c6_active_probe.yaml` before flashing the full main firmware. It sends slow read-only requests after a quiet bus window and exposes:
+
+- `Active probe requests sent`
+- `Active probe replies`
+- `Active probe timeouts`
+- `Active probe bus busy skips`
+- the mapped temperature, voltage, flow, frequency and raw status entities
+
+If `Active probe bus busy skips` increases but `Active probe requests sent` stays at zero, the bus never stayed quiet long enough for the conservative probe. If requests increase but replies do not, the ESP transmit path or bus ownership is still the likely problem.
+
 ## Passive Bus Sniffing
 
 If both slave `1` and slave `251` time out with the bring-up firmware, flash `adlar_aurora3_xiao_esp32c6_sniffer.yaml`.

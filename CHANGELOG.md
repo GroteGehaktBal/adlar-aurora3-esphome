@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.1 - 2026-06-01
+
+- Updated bring-up firmware to probe both likely Aurora III Modbus slave IDs: `1` and `251`.
+- Added separate diagnostic sensors for slave `1` and slave `251` first-contact testing.
+
 ## 0.3.0 - 2026-06-01
 
 - Added a minimal bring-up firmware that exposes a visible firmware marker and sends only one Modbus read per minute.

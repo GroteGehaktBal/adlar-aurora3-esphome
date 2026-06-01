@@ -4,14 +4,13 @@
 #
 # Purpose:
 # - Prove that the XIAO is running the expected firmware.
-# - Send only one Modbus read per minute while debugging wiring/protocol.
+# - Probe the two most likely Aurora III slave IDs while debugging wiring/protocol.
 # - Avoid a burst of timeouts from the full register map.
 
 substitutions:
   name: adlar-aurora3
   friendly_name: Adlar Aurora III
-  firmware_profile: "bring-up 0.3.0 - 9600 8N2 - one input read per minute"
-  modbus_slave_id: "1"
+  firmware_profile: "bring-up 0.3.1 - 9600 8N2 - slave 1 and 251 probe"
   modbus_update_interval: 60s
   modbus_command_throttle: 1000ms
   modbus_send_wait_time: 500ms
@@ -22,7 +21,7 @@ esphome:
   comment: "Adlar Aurora III JÅN RS485 Modbus bring-up profile"
   project:
     name: grotegehaktbal.adlar_aurora3_esphome
-    version: "0.3.0-bringup"
+    version: "0.3.1-bringup"
 
 dashboard_import:
   package_import_url: github://GroteGehaktBal/adlar-aurora3-esphome/adlar_aurora3_xiao_esp32c6_bringup.yaml@main
@@ -87,9 +86,16 @@ modbus:
   send_wait_time: ${modbus_send_wait_time}
 
 modbus_controller:
-  - id: aurora3
+  - id: aurora3_slave_1
     modbus_id: modbus_rs485
-    address: ${modbus_slave_id}
+    address: 1
+    command_throttle: ${modbus_command_throttle}
+    setup_priority: -10
+    update_interval: ${modbus_update_interval}
+
+  - id: aurora3_slave_251
+    modbus_id: modbus_rs485
+    address: 251
     command_throttle: ${modbus_command_throttle}
     setup_priority: -10
     update_interval: ${modbus_update_interval}
@@ -115,9 +121,21 @@ sensor:
       sorting_group_id: group_diagnostics
 
   - platform: modbus_controller
-    modbus_controller_id: aurora3
-    id: bringup_system_status_bits
-    name: "Bring-up system status bits"
+    modbus_controller_id: aurora3_slave_1
+    id: bringup_slave_1_system_status_bits
+    name: "Bring-up slave 1 system status bits"
+    register_type: read
+    address: 38
+    value_type: U_WORD
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_modbus
+
+  - platform: modbus_controller
+    modbus_controller_id: aurora3_slave_251
+    id: bringup_slave_251_system_status_bits
+    name: "Bring-up slave 251 system status bits"
     register_type: read
     address: 38
     value_type: U_WORD
@@ -152,12 +170,26 @@ text_sensor:
     name: "Bring-up status"
     update_interval: 60s
     lambda: |-
-      if (isnan(id(bringup_system_status_bits).state)) {
-        return std::string("No Modbus reply yet");
+      const bool slave_1_ok = !isnan(id(bringup_slave_1_system_status_bits).state);
+      const bool slave_251_ok = !isnan(id(bringup_slave_251_system_status_bits).state);
+      char buffer[80];
+
+      if (slave_1_ok && slave_251_ok) {
+        snprintf(buffer, sizeof(buffer), "Slaves 1 and 251 replied: %u / %u",
+                 (unsigned) id(bringup_slave_1_system_status_bits).state,
+                 (unsigned) id(bringup_slave_251_system_status_bits).state);
+        return std::string(buffer);
       }
-      char buffer[48];
-      snprintf(buffer, sizeof(buffer), "Modbus reply: status bits %u",
-               (unsigned) id(bringup_system_status_bits).state);
-      return std::string(buffer);
+      if (slave_1_ok) {
+        snprintf(buffer, sizeof(buffer), "Slave 1 replied: status bits %u",
+                 (unsigned) id(bringup_slave_1_system_status_bits).state);
+        return std::string(buffer);
+      }
+      if (slave_251_ok) {
+        snprintf(buffer, sizeof(buffer), "Slave 251 replied: status bits %u",
+                 (unsigned) id(bringup_slave_251_system_status_bits).state);
+        return std::string(buffer);
+      }
+      return std::string("No Modbus reply yet from slave 1 or 251");
     web_server:
       sorting_group_id: group_modbus

@@ -37,6 +37,8 @@ If probes show `TX` requests but always `RX: no reply`, try the alternative TTL 
 
 This is necessary because different RS485 boards use `TXD/RXD` labels from different points of view.
 
+The correct TTL orientation should leave Arduino `D10/RX` idle HIGH when no bytes are being received. If the serial monitor shows all-zero bytes such as `00:00:00:00`, that is not a Modbus reply. It usually means Arduino `D10/RX` is held LOW, the TTL data wires are in the wrong orientation, or the receiver output is noisy.
+
 RS485 side:
 
 | RS485 module | JÅN Modbus port |

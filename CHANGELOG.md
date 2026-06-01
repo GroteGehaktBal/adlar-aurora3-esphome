@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.6 - 2026-06-01
+
+- Added Arduino RX idle-state diagnostics and all-zero reply warnings to distinguish real bus bytes from a stuck-low RX line.
+
 ## 0.6.5 - 2026-06-01
 
 - Documented ambiguous `TXD/RXD` labeling on RS485-to-TTL boards and added the alternate TTL wiring test.

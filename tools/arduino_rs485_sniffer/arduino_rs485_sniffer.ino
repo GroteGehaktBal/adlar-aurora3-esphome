@@ -67,6 +67,8 @@ uint8_t next_probe = 0;
 uint32_t last_probe_ms = 0;
 uint32_t last_passive_byte_ms = 0;
 bool passive_line_open = false;
+bool warned_all_zero_reply = false;
+bool warned_rx_idle_low = false;
 
 void print_hex_byte(uint8_t value) {
   if (value < 0x10) {
@@ -81,6 +83,32 @@ void print_hex_buffer(const uint8_t *data, uint8_t length) {
       Serial.print(':');
     }
     print_hex_byte(data[i]);
+  }
+}
+
+bool all_bytes_are_zero(const uint8_t *data, uint8_t length) {
+  if (length == 0) {
+    return false;
+  }
+
+  for (uint8_t i = 0; i < length; i++) {
+    if (data[i] != 0x00) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+void print_rx_idle_state() {
+  const bool rx_high = digitalRead(RS485_RX_PIN) == HIGH;
+
+  Serial.print(F("Arduino D10/RX idle state: "));
+  Serial.println(rx_high ? F("HIGH (expected)") : F("LOW (bad)"));
+
+  if (!rx_high && !warned_rx_idle_low) {
+    Serial.println(F("Hint: RX idle LOW usually means the TTL wiring is wrong, the receiver output is held low, or the line is noisy."));
+    warned_rx_idle_low = true;
   }
 }
 
@@ -208,6 +236,11 @@ void run_probe(const Probe &probe) {
     print_hex_buffer(reply, reply_length);
     Serial.println();
 
+    if (all_bytes_are_zero(reply, reply_length) && !warned_all_zero_reply) {
+      Serial.println(F("RX note: all-zero bytes are not a valid Modbus reply. RX is probably stuck LOW or the TTL TXD/RXD orientation is wrong."));
+      warned_all_zero_reply = true;
+    }
+
     if (reply_length == sizeof(request) && memcmp(request, reply, sizeof(request)) == 0) {
       Serial.println(F("RX note: exact echo. TTL TXD/RXD loopback is working."));
     }
@@ -231,6 +264,7 @@ void setup() {
   Serial.println(F("RS485 side: 9600 baud, approx 8N2 TX, 8N1 RX"));
   Serial.println(F("D10 <- module TXD, D11 -> module RXD"));
   Serial.println(F("First listening passively, then sending slow Modbus probes."));
+  print_rx_idle_state();
 }
 
 void loop() {

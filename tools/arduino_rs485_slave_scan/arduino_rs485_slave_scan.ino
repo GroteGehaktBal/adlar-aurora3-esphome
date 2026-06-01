@@ -56,6 +56,9 @@ const RegisterProbe register_probes[] = {
   {0x03, 0x0834, "holding 2100"},
 };
 
+bool warned_all_zero_reply = false;
+bool warned_rx_idle_low = false;
+
 void print_hex_byte(uint8_t value) {
   if (value < 0x10) {
     Serial.print('0');
@@ -69,6 +72,32 @@ void print_hex_buffer(const uint8_t *data, uint8_t length) {
       Serial.print(':');
     }
     print_hex_byte(data[i]);
+  }
+}
+
+bool all_bytes_are_zero(const uint8_t *data, uint8_t length) {
+  if (length == 0) {
+    return false;
+  }
+
+  for (uint8_t i = 0; i < length; i++) {
+    if (data[i] != 0x00) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+void print_rx_idle_state() {
+  const bool rx_high = digitalRead(RS485_RX_PIN) == HIGH;
+
+  Serial.print(F("Arduino D10/RX idle state: "));
+  Serial.println(rx_high ? F("HIGH (expected)") : F("LOW (bad)"));
+
+  if (!rx_high && !warned_rx_idle_low) {
+    Serial.println(F("Hint: RX idle LOW usually means the TTL wiring is wrong, the receiver output is held low, or the line is noisy."));
+    warned_rx_idle_low = true;
   }
 }
 
@@ -172,6 +201,7 @@ void setup() {
   Serial.println(F("Serial monitor: 115200 baud"));
   Serial.println(F("RS485: 9600 baud, approx 8N2 TX, 8N1 RX"));
   Serial.println(F("Read-only scan. This will repeat until reset."));
+  print_rx_idle_state();
 }
 
 void loop() {
@@ -207,6 +237,9 @@ void loop() {
         if (looks_like_modbus_reply(slave, reply, reply_length)) {
           Serial.print(F("  <-- valid Modbus CRC"));
           replies++;
+        } else if (all_bytes_are_zero(reply, reply_length)) {
+          Serial.print(F("  <-- all-zero bytes; RX likely stuck LOW or TTL orientation is wrong"));
+          warned_all_zero_reply = true;
         } else {
           Serial.print(F("  <-- bytes seen, CRC/slave not valid"));
         }
@@ -221,6 +254,10 @@ void loop() {
   Serial.println();
   Serial.print(F("Scan pass complete. Valid replies in this pass: "));
   Serial.println(replies);
+  if (warned_all_zero_reply) {
+    Serial.println(F("All-zero RX bytes are not valid Modbus traffic. Return to the TTL orientation where D10/RX idles HIGH."));
+  }
+  print_rx_idle_state();
   Serial.println(F("Repeating in 10 seconds..."));
   Serial.println();
   delay(10000);

@@ -4,6 +4,7 @@
 
 - Updated bring-up firmware to probe both likely Aurora III Modbus slave IDs: `1` and `251`.
 - Added separate diagnostic sensors for slave `1` and slave `251` first-contact testing.
+- Disabled Modbus command retries in the bring-up firmware so failed probes stay easy to read in logs.
 
 ## 0.3.0 - 2026-06-01
 

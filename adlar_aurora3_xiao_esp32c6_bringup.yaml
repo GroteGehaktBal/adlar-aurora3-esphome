@@ -90,6 +90,7 @@ modbus_controller:
     modbus_id: modbus_rs485
     address: 1
     command_throttle: ${modbus_command_throttle}
+    max_cmd_retries: 0
     setup_priority: -10
     update_interval: ${modbus_update_interval}
 
@@ -97,6 +98,7 @@ modbus_controller:
     modbus_id: modbus_rs485
     address: 251
     command_throttle: ${modbus_command_throttle}
+    max_cmd_retries: 0
     setup_priority: -10
     update_interval: ${modbus_update_interval}
 

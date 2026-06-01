@@ -32,7 +32,7 @@
 substitutions:
   name: adlar-aurora3
   friendly_name: Adlar Aurora III
-  firmware_profile: "active-sidecar 1.0.0 - slow reads + guarded writes"
+  firmware_profile: "active-sidecar 1.0.1 - weather-curve aware"
 
 esphome:
   name: ${name}
@@ -40,7 +40,7 @@ esphome:
   comment: "Active sidecar Modbus integration for Adlar Aurora III JÅN RS485"
   project:
     name: grotegehaktbal.adlar_aurora3_esphome
-    version: "1.0.0-active-sidecar"
+    version: "1.0.1-active-sidecar"
 
 dashboard_import:
   package_import_url: github://GroteGehaktBal/adlar-aurora3-esphome/adlar_aurora3_xiao_esp32c6_active_sidecar.yaml@main
@@ -126,7 +126,7 @@ switch:
       sorting_group_id: group_controls
 
   - platform: template
-    name: "DHW mode"
+    name: "Domestic hot water (DHW) mode"
     icon: "mdi:water-boiler"
     lambda: |-
       if (isnan(id(dhw_mode_current_raw).state)) return {};
@@ -140,7 +140,7 @@ switch:
           id(pending_write_address) = 2102;
           id(pending_write_value) = 1;
           id(pending_write_requested) = true;
-          id(active_sidecar_status).publish_state("queued write: DHW mode on");
+          id(active_sidecar_status).publish_state("queued write: domestic hot water mode on");
     turn_off_action:
       - lambda: |-
           if (!id(write_controls_enabled).state) {
@@ -150,7 +150,7 @@ switch:
           id(pending_write_address) = 2102;
           id(pending_write_value) = 0;
           id(pending_write_requested) = true;
-          id(active_sidecar_status).publish_state("queued write: DHW mode off");
+          id(active_sidecar_status).publish_state("queued write: domestic hot water mode off");
     web_server:
       sorting_group_id: group_controls
 
@@ -308,6 +308,14 @@ uart:
           };
 
           auto publish_read_value = [](uint8_t function, uint16_t address, uint16_t raw) -> bool {
+            auto optional_temperature = [](uint16_t value) -> float {
+              const int16_t signed_value = (int16_t) value;
+              if (signed_value <= -400 || signed_value >= 1200) {
+                return NAN;
+              }
+              return signed_value * 0.1f;
+            };
+
             if (function == 0x04) {
               switch (address) {
                 case 1:
@@ -362,19 +370,19 @@ uart:
                   id(outlet_water_temperature).publish_state(((int16_t) raw) * 0.1f);
                   return true;
                 case 44:
-                  id(buffer_tank_upper_temperature).publish_state(((int16_t) raw) * 0.1f);
+                  id(buffer_tank_upper_temperature).publish_state(optional_temperature(raw));
                   return true;
                 case 45:
-                  id(buffer_tank_lower_temperature).publish_state(((int16_t) raw) * 0.1f);
+                  id(buffer_tank_lower_temperature).publish_state(optional_temperature(raw));
                   return true;
                 case 46:
-                  id(dhw_tank_temperature).publish_state(((int16_t) raw) * 0.1f);
+                  id(dhw_tank_temperature).publish_state(optional_temperature(raw));
                   return true;
                 case 47:
-                  id(zone2_mixing_station_temperature).publish_state(((int16_t) raw) * 0.1f);
+                  id(zone2_mixing_station_temperature).publish_state(optional_temperature(raw));
                   return true;
                 case 48:
-                  id(solar_water_heating_temperature).publish_state(((int16_t) raw) * 0.1f);
+                  id(solar_water_heating_temperature).publish_state(optional_temperature(raw));
                   return true;
                 case 49:
                   id(outdoor_unit_coil_temperature).publish_state(((int16_t) raw) * 0.1f);
@@ -903,7 +911,7 @@ binary_sensor:
       sorting_group_id: group_status
 
   - platform: template
-    name: "Heat pump DHW mode effective"
+    name: "Heat pump domestic hot water (DHW) mode effective"
     lambda: |-
       if (isnan(id(effective_mode_raw).state)) return {};
       return ((uint16_t) id(effective_mode_raw).state & 0x0004) != 0;
@@ -1105,7 +1113,7 @@ sensor:
       sorting_group_id: group_controls
   - platform: template
     id: zone1_dhw_max_temperature
-    name: "Zone 1 DHW max temperature"
+    name: "Zone 1 domestic hot water (DHW) max temperature"
     accuracy_decimals: 1
     unit_of_measurement: "°C"
     device_class: temperature
@@ -1114,7 +1122,7 @@ sensor:
       sorting_group_id: group_controls
   - platform: template
     id: zone1_dhw_min_temperature
-    name: "Zone 1 DHW min temperature"
+    name: "Zone 1 domestic hot water (DHW) min temperature"
     accuracy_decimals: 1
     unit_of_measurement: "°C"
     device_class: temperature
@@ -1219,7 +1227,7 @@ sensor:
       sorting_group_id: group_temperatures
   - platform: template
     id: dhw_tank_temperature
-    name: "DHW tank temperature"
+    name: "Domestic hot water (DHW) tank temperature"
     accuracy_decimals: 1
     unit_of_measurement: "°C"
     device_class: temperature
@@ -1343,7 +1351,7 @@ sensor:
       sorting_group_id: group_hydraulics
   - platform: template
     id: climate_curve_cooling_set
-    name: "Climate curve cooling set"
+    name: "Weather compensation cooling target"
     accuracy_decimals: 1
     unit_of_measurement: "°C"
     device_class: temperature
@@ -1352,7 +1360,7 @@ sensor:
       sorting_group_id: group_controls
   - platform: template
     id: climate_curve_heating_set
-    name: "Climate curve heating set"
+    name: "Weather compensation heating target"
     accuracy_decimals: 1
     unit_of_measurement: "°C"
     device_class: temperature
@@ -1529,7 +1537,7 @@ sensor:
       sorting_group_id: group_controls
   - platform: template
     id: dhw_mode_current_raw
-    name: "DHW mode current raw"
+    name: "Domestic hot water (DHW) mode current raw"
     accuracy_decimals: 0
     state_class: measurement
     entity_category: diagnostic
@@ -1545,7 +1553,7 @@ sensor:
       sorting_group_id: group_diagnostics
   - platform: template
     id: dhw_setpoint_current
-    name: "DHW setpoint current"
+    name: "Domestic hot water (DHW) setpoint current"
     accuracy_decimals: 1
     unit_of_measurement: "°C"
     device_class: temperature
@@ -1554,7 +1562,7 @@ sensor:
       sorting_group_id: group_controls
   - platform: template
     id: zone1_heating_setpoint_current
-    name: "Zone 1 heating setpoint current"
+    name: "Zone 1 heating setpoint override current"
     accuracy_decimals: 1
     unit_of_measurement: "°C"
     device_class: temperature
@@ -1665,7 +1673,7 @@ sensor:
 
 number:
   - platform: template
-    name: "Zone 1 heating setpoint"
+    name: "Zone 1 heating setpoint override"
     id: zone1_heating_setpoint_control
     min_value: 18
     max_value: 50
@@ -1685,12 +1693,12 @@ number:
           id(pending_write_address) = 2107;
           id(pending_write_value) = (uint16_t) roundf(x * 10.0f);
           id(pending_write_requested) = true;
-          id(active_sidecar_status).publish_state("queued write: zone 1 heating setpoint");
+          id(active_sidecar_status).publish_state("queued write: zone 1 heating setpoint override");
     web_server:
       sorting_group_id: group_controls
 
   - platform: template
-    name: "DHW setpoint"
+    name: "Domestic hot water (DHW) setpoint"
     id: dhw_setpoint_control
     min_value: 30
     max_value: 60
@@ -1710,7 +1718,7 @@ number:
           id(pending_write_address) = 2105;
           id(pending_write_value) = (uint16_t) roundf(x * 10.0f);
           id(pending_write_requested) = true;
-          id(active_sidecar_status).publish_state("queued write: DHW setpoint");
+          id(active_sidecar_status).publish_state("queued write: domestic hot water setpoint");
     web_server:
       sorting_group_id: group_controls
 
@@ -1906,6 +1914,44 @@ text_sensor:
       return std::string(buffer);
     web_server:
       sorting_group_id: group_status
+
+  - platform: template
+    name: "Zone configuration text"
+    update_interval: 10s
+    lambda: |-
+      if (isnan(id(zone_config_raw).state)) {
+        return std::string("No Modbus data");
+      }
+      const uint16_t config = (uint16_t) id(zone_config_raw).state;
+      if (config == 0) return std::string("Single-zone system");
+      if (config == 1) return std::string("Two-zone system");
+      char buffer[40];
+      snprintf(buffer, sizeof(buffer), "Unknown zone config (%u)", config);
+      return std::string(buffer);
+    web_server:
+      sorting_group_id: group_status
+
+  - platform: template
+    name: "Weather compensation text"
+    update_interval: 10s
+    lambda: |-
+      if (isnan(id(climate_curve_heating_set).state) && isnan(id(target_outlet_temperature).state)) {
+        return std::string("No Modbus data");
+      }
+      char buffer[112];
+      if (!isnan(id(climate_curve_heating_set).state) && !isnan(id(target_outlet_temperature).state)) {
+        snprintf(buffer, sizeof(buffer), "JÅN curve %.1f °C, target outlet %.1f °C",
+                 id(climate_curve_heating_set).state, id(target_outlet_temperature).state);
+        return std::string(buffer);
+      }
+      if (!isnan(id(climate_curve_heating_set).state)) {
+        snprintf(buffer, sizeof(buffer), "JÅN curve %.1f °C", id(climate_curve_heating_set).state);
+        return std::string(buffer);
+      }
+      snprintf(buffer, sizeof(buffer), "Target outlet %.1f °C", id(target_outlet_temperature).state);
+      return std::string(buffer);
+    web_server:
+      sorting_group_id: group_controls
 
   - platform: template
     name: "Heat pump fault summary"

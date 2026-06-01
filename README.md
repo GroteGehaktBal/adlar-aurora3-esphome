@@ -20,7 +20,7 @@ This is an independent community project. It is not affiliated with, endorsed by
 
 - Reads status bits, fault bits, temperatures, water flow, compressor frequency, pressure, current and voltage.
 - Adds a complete active sidecar profile that waits for quiet bus windows and reads one register per request.
-- Exposes limited Home Assistant controls for heating setpoint, DHW setpoint, room setpoint, HVAC mode, DHW mode and zone control.
+- Exposes limited Home Assistant controls for heating setpoint override, domestic hot water (DHW/SWW) setpoint, room setpoint, HVAC mode, DHW/SWW mode and zone control.
 - Keeps all write controls behind an explicit `Enable write controls` switch.
 - Uses the native ESPHome API, OTA updates and a simple local web interface.
 - Deliberately avoids exposing installer/service parameters as ordinary Home Assistant controls.
@@ -117,6 +117,16 @@ Useful diagnostic entities:
 
 Write controls are blocked unless `Enable write controls` is turned on. Start by watching readback values only. When you are ready to test writes, make one small setpoint change and confirm that `Active sidecar write replies` increases and the corresponding `... current` entity reads back the expected value.
 
+## Weather Compensation, Zones And DHW
+
+In the Adlar/JÅN user interface, `DHW` means domestic hot water. In Dutch manuals this is usually called `SWW` (`sanitair warm water`). If your installation has no domestic-hot-water tank sensor, those entities may stay unavailable.
+
+The Aurora III controller supports zone 1 and zone 2, but many homes use only zone 1. Seeing `Zone 1` active on the JÅN display is therefore normal. Zone 2 entities are exposed because the protocol supports them; they may stay `NA` on a single-zone installation.
+
+The JÅN module is the authority for the weather-compensation or custom heating curve. The active sidecar exposes the calculated values as `Weather compensation heating target`, `Weather compensation cooling target`, and `Target outlet temperature`.
+
+The writable `Zone 1 heating setpoint override` maps to holding register `2107`. Public community findings and local testing both show that the JÅN module can overwrite this register when weather compensation is active. If you want the heat pump to keep following the custom weather-compensation curve, leave `Enable write controls` off and avoid automations that repeatedly write the zone or room setpoint.
+
 ## UART Loopback Test
 
 If the sniffer logs no RX bytes, flash `adlar_aurora3_xiao_esp32c6_uart_loopback.yaml`. Disconnect the RS485 module, temporarily short XIAO `D6` to XIAO `D7`, and watch the logs. Matching `[uart_debug]` TX and RX lines prove the ESPHome UART pins are working before replacing or retesting the RS485 transceiver.
@@ -193,7 +203,7 @@ See [docs/troubleshooting.md](docs/troubleshooting.md) for symptoms such as CRC 
 - Writable controls use holding registers (`2100`, `2101`, `2102`, `2105`, `2107`, `2114`) and are blocked by default.
 - The active sidecar uses function code 3 for holding-register readback and function code 6 for guarded single-register writes.
 - Temperatures are scaled as tenths of a degree (`123` = `12.3 °C`) for the Aurora III profile.
-- The JÅN module may overwrite heating setpoint register `2107` when weather compensation is active.
+- The JÅN module may overwrite heating setpoint override register `2107` when weather compensation is active.
 
 ## Sources
 

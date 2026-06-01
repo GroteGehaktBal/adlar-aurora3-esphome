@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.1 - 2026-06-02
+
+- Treated optional temperature sentinel values, such as an uninstalled buffer tank sensor reporting `-50.0 °C`, as unavailable in the active sidecar profile.
+- Renamed DHW entities to clarify that DHW means domestic hot water, equivalent to SWW in Dutch Adlar/JÅN menus.
+- Renamed climate-curve entities to `Weather compensation ... target` and made the zone 1 heating setpoint control explicit as an override.
+- Added zone-configuration and weather-compensation text entities to make the active sidecar easier to interpret from Home Assistant.
+- Documented JÅN-controlled weather compensation, zone 1/zone 2 behavior, and why register `2107` may not keep Home Assistant-written values.
+
 ## 1.0.0 - 2026-06-01
 
 - Added `adlar_aurora3_xiao_esp32c6_active_sidecar.yaml`, a complete custom active sidecar profile for shared JÅN RS485 buses.

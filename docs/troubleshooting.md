@@ -74,13 +74,27 @@ If `Active sidecar read requests` increases but `Active sidecar read replies` do
 For write testing:
 
 1. Leave `Enable write controls` off while verifying read-only sensors.
-2. Confirm the `... current` entity for the setting is populated, for example `Zone 1 heating setpoint current`.
+2. Confirm the `... current` entity for the setting is populated, for example `Zone 1 heating setpoint override current` or `Weather compensation heating target`.
 3. Turn on `Enable write controls`.
 4. Make one small change, preferably a harmless setpoint step.
 5. Confirm `Active sidecar write requests` and `Active sidecar write replies` both increase.
 6. Turn `Enable write controls` off again.
 
 If the write is acknowledged but the value changes back later, the JÅN module or weather-compensation logic may be overwriting that register. This is expected behavior on some installations, especially for register `2107`.
+
+## Weather Compensation Or Custom Curve Does Not Stick
+
+The JÅN display and Adlar user manual treat weather compensation as a JÅN-controlled feature. In normal operation the custom or dynamic heating curve can determine the water-temperature target. The ESPHome active sidecar can read that calculated target, but this project does not yet know confirmed Modbus registers for editing the custom curve points themselves.
+
+If a custom curve seems to reset after a while:
+
+- Confirm the curve was edited for the active heating zone, usually `Zone-H` or zone 1 on single-zone systems.
+- Confirm both custom-curve points were saved with the checkmark on the JÅN display.
+- Watch `Weather compensation heating target` and `Target outlet temperature` in Home Assistant instead of only the room-temperature setpoint.
+- Keep `Enable write controls` off and avoid automations that write `Zone 1 heating setpoint override` or `Room temperature setpoint`.
+- If register `2107` changes back after a write, that is expected when the JÅN module is managing weather compensation.
+
+The room target shown on the JÅN `Zone 1, Zone 2, DHW/SWW` screen is not the same thing as the weather-compensation water target. The manual notes that when weather compensation is active, the normal set-temperature in that menu may not be adjustable.
 
 ## Passive Bus Sniffing
 
@@ -236,4 +250,4 @@ Check:
 - `Water flow`
 - `Compressor actual frequency`
 
-Only after these behave sensibly should you enable and test `Zone 1 heating setpoint`.
+Only after these behave sensibly should you enable and test `Zone 1 heating setpoint override`.

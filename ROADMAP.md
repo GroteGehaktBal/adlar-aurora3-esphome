@@ -15,6 +15,8 @@ This list is intentionally conservative. Heat pump integrations should become mo
 ## Register Work
 
 - Verify temperature scaling across multiple installations.
+- Identify confirmed Modbus registers, if any, for selecting weather-compensation curves and editing custom curve points.
+- Confirm how JÅN dynamic weather compensation combines room setpoint, room temperature and water-temperature target.
 - Verify fan speed unit, because community sources differ.
 - Verify pump PWM unit and range.
 - Verify total energy counter wrap/reset behavior.

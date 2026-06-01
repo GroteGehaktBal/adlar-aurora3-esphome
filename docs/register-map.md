@@ -18,6 +18,8 @@ This project uses zero-based Modbus register addresses, matching ESPHome and Hom
 | Active sidecar pace | One register per request, every 2s when the bus is quiet |
 | Quiet window | At least 350 ms after the last observed RX bytes |
 
+`DHW` means domestic hot water. In Dutch Adlar/JÅN menus and manuals this is usually shown as `SWW` (`sanitair warm water`).
+
 ## Main Input Registers
 
 | Address | Entity | Type | Scale/unit | Notes |
@@ -39,10 +41,10 @@ This project uses zero-based Modbus register addresses, matching ESPHome and Hom
 | `41` | Total leaving water temperature | `S_WORD` | x0.1 °C | Overall leaving water sensor |
 | `42` | Inlet water temperature | `S_WORD` | x0.1 °C | Water inlet/return |
 | `43` | Outlet water temperature | `S_WORD` | x0.1 °C | Water outlet/supply |
-| `44` | Buffer tank upper temperature | `S_WORD` | x0.1 °C | May be `0`/unpopulated if no buffer sensor |
-| `45` | Buffer tank lower temperature | `S_WORD` | x0.1 °C | May be `0`/unpopulated if no buffer sensor |
-| `46` | DHW tank temperature | `S_WORD` | x0.1 °C | May be `0`/unpopulated if no DHW sensor |
-| `47` | Zone 2 mixing station temperature | `S_WORD` | x0.1 °C | Optional zone 2 sensor |
+| `44` | Buffer tank upper temperature | `S_WORD` | x0.1 °C | Optional sensor; implausible sentinels such as `-50.0 °C` are exposed as unavailable |
+| `45` | Buffer tank lower temperature | `S_WORD` | x0.1 °C | Optional sensor; implausible sentinels such as `-50.0 °C` are exposed as unavailable |
+| `46` | Domestic hot water (DHW/SWW) tank temperature | `S_WORD` | x0.1 °C | Optional sensor; unavailable if no DHW tank sensor is installed |
+| `47` | Zone 2 mixing station temperature | `S_WORD` | x0.1 °C | Optional zone 2 sensor; unavailable on many single-zone systems |
 | `48` | Solar water heating temperature | `S_WORD` | x0.1 °C | Optional solar input |
 | `49` | Outdoor unit coil temperature | `S_WORD` | x0.1 °C | Refrigerant/coil sensor |
 | `50` | Ambient temperature | `S_WORD` | x0.1 °C | Outdoor ambient |
@@ -55,8 +57,8 @@ This project uses zero-based Modbus register addresses, matching ESPHome and Hom
 | `62` | Pump PWM output | `U_WORD` | % | Pump command |
 | `63` | Pump PWM feedback | `U_WORD` | % | Pump feedback candidate |
 | `64` | Water flow | `U_WORD` | x0.1 m³/h | Used for thermal power estimate |
-| `66` | Climate curve cooling set | `S_WORD` | x0.1 °C | What the internal/JÅN curve calculates |
-| `67` | Climate curve heating set | `S_WORD` | x0.1 °C | What the internal/JÅN curve calculates |
+| `66` | Weather compensation cooling target | `S_WORD` | x0.1 °C | What the internal/JÅN curve calculates |
+| `67` | Weather compensation heating target | `S_WORD` | x0.1 °C | What the internal/JÅN curve calculates |
 | `70` | EEV opening | `U_WORD` | steps | Electronic expansion valve |
 | `72` | Fan speed | `U_WORD` | rpm | Outdoor fan |
 | `74` | AC voltage | `U_WORD` | V | May be zero on some firmwares |
@@ -82,10 +84,10 @@ This project uses zero-based Modbus register addresses, matching ESPHome and Hom
 | ---: | --- | --- | --- | --- |
 | `2100` | HVAC mode | Cooling `1`, heating `2`, auto `4` | Disabled by default | Write carefully |
 | `2101` | Zone control | All off `0`, zone 1 `1`, zone 2 `2`, all on `3` | Disabled by default | Write carefully |
-| `2102` | DHW mode | Off `0`, on `1` | Disabled by default | Write carefully |
+| `2102` | Domestic hot water (DHW/SWW) mode | Off `0`, on `1` | Disabled by default | Write carefully |
 | `2103` | Function A raw | raw bitfield | Disabled by default | Includes silent/electric heater/disinfection bits in community examples |
-| `2105` | DHW setpoint | 30-60 °C, x10 write scaling | Disabled by default | Write carefully |
-| `2107` | Zone 1 heating setpoint | 18-50 °C, x10 write scaling | Disabled by default | JÅN/weather compensation may overwrite it |
+| `2105` | Domestic hot water (DHW/SWW) setpoint | 30-60 °C, x10 write scaling | Disabled by default | Write carefully |
+| `2107` | Zone 1 heating setpoint override | 18-50 °C, x10 write scaling | Disabled by default | JÅN/weather compensation may overwrite it |
 | `2114` | Room temperature setpoint | 10-30 °C, x10 write scaling | Disabled by default | Behavior depends on thermostat configuration |
 | `6035` | Observed holding 6035 raw | raw | Diagnostic read-only in this project | Seen on one tested bus, meaning not confirmed |
 
@@ -115,8 +117,8 @@ These values were captured from one JÅN/Aurora III installation with the passiv
 | `4` | `50` | `228` | `22.8 °C` | Matches ambient temperature scaling |
 | `4` | `63` | `5` | `5 %` | Pump/PWM-style feedback candidate |
 | `4` | `64` | `0` | `0.0 m³/h` | Water-flow register candidate |
-| `4` | `66` | `180` | `18.0 °C` | Cooling curve/set value candidate |
-| `4` | `67` | `180` | `18.0 °C` | Heating curve/set value candidate |
+| `4` | `66` | `180` | `18.0 °C` | Weather compensation cooling target candidate |
+| `4` | `67` | `180` | `18.0 °C` | Weather compensation heating target candidate |
 | `4` | `73` | `0` | raw `0` | Observed, meaning not confirmed |
 | `4` | `74` | `226` | `226 V` | AC voltage candidate |
 | `4` | `79` | `0` | `0 Hz` | Compressor actual frequency candidate |
@@ -125,7 +127,7 @@ These values were captured from one JÅN/Aurora III installation with the passiv
 | `4` | `92` | `0` | raw `0` | Observed, meaning not confirmed |
 | `4` | `97` | `0` | raw `0` | Protection/fault bitfield candidate |
 | `3` | `2100` | `2` | raw `2` | Current/target HVAC mode candidate |
-| `3` | `2107` | `300` | `30.0 °C` | Zone 1 heating setpoint/current JÅN value candidate |
+| `3` | `2107` | `300` | `30.0 °C` | Zone 1 heating setpoint override/current JÅN value candidate |
 | `3` | `6035` | `1` | raw `1` | Observed holding register outside the public control set |
 
 ## Hardware Feedback Wanted

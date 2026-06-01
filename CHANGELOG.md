@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.3 - 2026-06-01
+
+- Changed the Arduino RS485 sketch from passive-only sniffing to a combined passive sniffer and slow active Modbus probe.
+- Added a TTL echo check for the Arduino plus RS485 module wiring.
+
 ## 0.6.2 - 2026-06-01
 
 - Added a safe 5V MAX485-style module test guide.

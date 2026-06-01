@@ -36,7 +36,23 @@ RS485 side:
 | `B-` | `B` |
 | `E` or bus `GND` | JÅN `GND` |
 
-Open the Arduino serial monitor at `115200` baud. If the module receives JÅN bus traffic at 5V, the sketch prints raw hex bytes.
+Open the Arduino serial monitor at `115200` baud.
+
+The sketch now does two things:
+
+1. It passively prints any bytes it hears on the bus.
+2. It actively sends slow Modbus read probes to slave `1` and `251`.
+
+If the module receives JÅN bus traffic or gets a Modbus reply at 5V, the sketch prints raw hex bytes. If it prints `RX: no reply`, the Arduino sent the request but did not receive a response.
+
+To prove the Arduino TTL wiring before connecting to JÅN:
+
+1. Disconnect RS485 `A/B/GND` from JÅN.
+2. Temporarily short the module TTL-side `TXD` and `RXD` pins.
+3. Upload the sketch.
+4. The serial monitor should show `RX note: exact echo. TTL TXD/RXD loopback is working.`
+
+Remove the `TXD`/`RXD` short before connecting to JÅN again.
 
 For a Mega, use hardware `Serial1` instead if preferred:
 

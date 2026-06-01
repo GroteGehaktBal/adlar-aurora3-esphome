@@ -6,12 +6,12 @@ Start with the ESP powered over USB and the heat pump/JÅN wiring connected with
 
 Check these first:
 
-1. Confirm the RS485 module is powered at 3.3V.
-2. Confirm XIAO `D6` goes to module `DI/TX-in` and XIAO `D7` goes to module `RO/RX-out`.
+1. Confirm the RS485 module is powered from XIAO `3V3`, not 5V.
+2. For an XY-485-style board, confirm XIAO `D6/TX` goes to module `RXD` and XIAO `D7/RX` goes to module `TXD`.
 3. Swap RS485 `A` and `B`.
 4. Confirm `GND` is connected between the transceiver and JÅN port.
-5. If your RS485 module has automatic direction control, remove `flow_control_pin: D2`.
-6. If your RS485 module needs manual direction, tie `DE` and `/RE` together and connect them to `D2`.
+5. For an automatic-direction module, keep `flow_control_pin` out of the YAML and leave `D2` disconnected.
+6. If your RS485 module needs manual direction, tie `DE` and `/RE` together, connect them to `D2`, and add `flow_control_pin: D2`.
 7. Try slave ID `1` first, then verify with a Modbus scanner if needed.
 
 ## CRC Errors Or Intermittent Timeouts

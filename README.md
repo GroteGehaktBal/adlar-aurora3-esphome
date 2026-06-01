@@ -29,7 +29,7 @@ This is an independent community project. It is not affiliated with, endorsed by
 Target hardware for this configuration:
 
 - Seeed Studio XIAO ESP32C6
-- 3.3V RS485-to-TTL transceiver
+- Automatic-direction RS485-to-TTL transceiver such as an `XY-485` board
 - Adlar/JÅN Modbus port with `A`, `B` and `GND`
 
 Do not feed a 5V TTL signal directly into the XIAO ESP32C6. Its GPIO pins are not 5V tolerant.
@@ -51,21 +51,20 @@ esphome compile adlar_aurora3_xiao_esp32c6.yaml
 
 ## Wiring Summary
 
-| XIAO ESP32C6 | GPIO | RS485 TTL module |
+| XIAO ESP32C6 | GPIO | XY-485 / automatic-direction RS485 module |
 | --- | ---: | --- |
-| D6 / TX | GPIO16 | DI / TX-in |
-| D7 / RX | GPIO17 | RO / RX-out |
-| D2 | GPIO2 | DE and /RE tied together, only for manual-direction modules |
-| 3V3 |  | VCC, only for a 3.3V module |
-| GND |  | GND |
+| D6 / TX | GPIO16 | RXD |
+| D7 / RX | GPIO17 | TXD |
+| 3V3 |  | VCC / UCC |
+| GND |  | GND / DNG |
 
-| RS485 TTL module | JÅN Modbus port |
+| XY-485 / automatic-direction RS485 module | JÅN Modbus port |
 | --- | --- |
-| A | A |
-| B | B |
-| GND | GND |
+| A+ | A |
+| B- | B |
+| E / GND | GND |
 
-If your RS485 module has automatic direction control, remove `flow_control_pin: D2` from the YAML.
+The default YAML is configured for automatic-direction RS485 modules. If you use a basic manual-direction MAX485 module, wire `DE` and `/RE` to `D2` and add `flow_control_pin: D2` to the `modbus:` block.
 
 More detail and a diagram are available in [docs/wiring.md](docs/wiring.md).
 

@@ -90,8 +90,9 @@ uart:
 modbus:
   id: modbus_rs485
   uart_id: uart_rs485
-  # Remove this line when using an RS485 module with automatic direction control.
-  flow_control_pin: D2
+  # The tested XY-485-style module has automatic RS485 direction control.
+  # For manual-direction MAX485 modules, wire DE + /RE to a GPIO and set:
+  # flow_control_pin: D2
   send_wait_time: 250ms
 
 modbus_controller:

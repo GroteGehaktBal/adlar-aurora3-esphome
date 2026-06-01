@@ -11,6 +11,7 @@ Contributions are welcome, especially real-world hardware test reports. This pro
 - ESPHome version.
 - Relevant logs with secrets removed.
 - Which read registers look correct.
+- Which firmware profile was tested, especially `active_sidecar`, `active_probe` or `passive_monitor`.
 - Which write controls were tested, and under what operating mode.
 
 ## Pull Request Guidelines
@@ -18,8 +19,8 @@ Contributions are welcome, especially real-world hardware test reports. This pro
 - Keep safety defaults conservative.
 - Do not expose installer/service parameters as normal Home Assistant controls without a clear reason.
 - Keep `secrets.yaml`, firmware binaries and local build output out of git.
-- Run `esphome config adlar_aurora3_xiao_esp32c6.yaml` before opening a PR.
-- Run `esphome compile adlar_aurora3_xiao_esp32c6.yaml` when changing YAML behavior.
+- Run `esphome config adlar_aurora3_xiao_esp32c6_active_sidecar.yaml` before opening a PR that changes the main sidecar behavior.
+- Run `esphome compile adlar_aurora3_xiao_esp32c6_active_sidecar.yaml` when changing YAML behavior.
 - Update `docs/register-map.md` if you add, remove or rescale registers.
 
 ## Naming

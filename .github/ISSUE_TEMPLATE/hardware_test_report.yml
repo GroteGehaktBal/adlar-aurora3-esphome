@@ -26,6 +26,17 @@ body:
       label: RS485 module
       placeholder: "3.3V automatic direction / manual DE-RE / other"
   - type: dropdown
+    id: firmware-profile
+    attributes:
+      label: Firmware profile tested
+      options:
+        - "active_sidecar"
+        - "active_probe"
+        - "passive_monitor"
+        - "bringup"
+        - "main_modbus_controller"
+        - "other"
+  - type: dropdown
     id: read-data
     attributes:
       label: Read data works?
@@ -46,6 +57,6 @@ body:
     id: observations
     attributes:
       label: Observations
-      description: Mention correct registers, wrong scaling, timeouts, CRC errors or bus-collision symptoms.
+      description: Mention correct registers, wrong scaling, active sidecar request/reply counters, timeouts, CRC errors or bus-collision symptoms.
     validations:
       required: true

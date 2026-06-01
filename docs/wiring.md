@@ -92,4 +92,4 @@ For a permanent parallel tap, avoid two loose bare wires under one screw. Use fe
 
 ## Bus Ownership
 
-ESPHome is an additional Modbus client/master. RS485 is electrically multi-drop, but Modbus RTU does not provide true collision avoidance. This project therefore uses slow polling, grouped register reads and disabled-by-default write controls. Start read-only and watch for timeouts or CRC errors before enabling controls.
+ESPHome is an additional Modbus client/master when you use the active probe or active sidecar profile. RS485 is electrically multi-drop, but Modbus RTU does not provide true collision avoidance. This project therefore uses slow polling, quiet-window checks, one-register reads in the active sidecar, and disabled-by-default write controls. Start read-only and watch for timeouts or CRC errors before enabling controls.

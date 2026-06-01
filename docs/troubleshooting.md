@@ -52,6 +52,36 @@ If the passive monitor only sees responses, try `adlar_aurora3_xiao_esp32c6_acti
 
 If `Active probe bus busy skips` increases but `Active probe requests sent` stays at zero, the bus never stayed quiet long enough for the conservative probe. If requests increase but replies do not, the ESP transmit path or bus ownership is still the likely problem.
 
+## Active Sidecar Profile
+
+Once the active probe gets replies, flash `adlar_aurora3_xiao_esp32c6_active_sidecar.yaml`. This is the complete profile for a shared JÅN bus. It reads all currently mapped registers and exposes guarded controls, but it still behaves politely: one request at a time, only after a quiet bus window.
+
+Expected signs:
+
+- `Firmware profile` shows `active-sidecar 1.0.0 - slow reads + guarded writes`.
+- `Active sidecar read requests` increases.
+- `Active sidecar read replies` increases shortly after the requests.
+- `Active sidecar timeouts` stays near zero.
+- `Active sidecar bus busy skips` may increase; this is normal and means the firmware is waiting while the existing JÅN traffic is active.
+- Temperature entities such as `Inlet water temperature`, `Outlet water temperature`, and `Ambient temperature` populate within a few minutes.
+
+The sidecar reads more than 60 registers one by one. A full first pass can take several minutes, especially when the bus is busy. Do not judge the firmware after only a few seconds.
+
+If replies increase but many entities stay `NA`, watch `Active sidecar last address` and `Active sidecar last frame`. Some optional sensors only populate if the heat pump has that physical sensor or feature installed.
+
+If `Active sidecar read requests` increases but `Active sidecar read replies` does not, return to the active probe and confirm wiring. The sidecar uses the same Modbus timing approach as the probe, so a sudden failure usually points to a wiring, bus-load, or firmware-selection issue.
+
+For write testing:
+
+1. Leave `Enable write controls` off while verifying read-only sensors.
+2. Confirm the `... current` entity for the setting is populated, for example `Zone 1 heating setpoint current`.
+3. Turn on `Enable write controls`.
+4. Make one small change, preferably a harmless setpoint step.
+5. Confirm `Active sidecar write requests` and `Active sidecar write replies` both increase.
+6. Turn `Enable write controls` off again.
+
+If the write is acknowledged but the value changes back later, the JÅN module or weather-compensation logic may be overwriting that register. This is expected behavior on some installations, especially for register `2107`.
+
 ## Passive Bus Sniffing
 
 If both slave `1` and slave `251` time out with the bring-up firmware, flash `adlar_aurora3_xiao_esp32c6_sniffer.yaml`.

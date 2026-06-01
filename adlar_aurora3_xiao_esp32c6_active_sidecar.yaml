@@ -1,0 +1,1928 @@
+---
+# Complete active sidecar ESPHome firmware for Adlar Aurora III / JÅN RS485.
+#
+# This profile is built from the active probe that worked on the shared JÅN bus.
+# It uses a custom slow Modbus RTU scheduler instead of ESPHome modbus_controller,
+# because shared JÅN bus installations already have existing controller traffic
+# and need quiet-window collision avoidance.
+#
+# Read behavior:
+#   - Function 4 for input registers.
+#   - Function 3 for holding registers.
+#   - One register per request.
+#   - Waits for a quiet RS485 window before sending.
+#
+# Write behavior:
+#   - Function 6 single-register writes only.
+#   - All write controls are blocked until "Enable write controls" is ON.
+#   - Temperature controls use tenths of a degree where the JÅN/Aurora mapping
+#     uses raw x10 values.
+#
+# Tested XY-485 TTL wiring:
+#   XIAO D6/TX -> RS485 module TXD
+#   XIAO D7/RX -> RS485 module RXD
+#   XIAO 3V3   -> RS485 module VCC
+#   XIAO GND   -> RS485 module GND/DNG
+#
+# RS485 side:
+#   RS485 A+   -> JÅN A
+#   RS485 B-   -> JÅN B
+#   RS485 GND  -> JÅN GND
+
+substitutions:
+  name: adlar-aurora3
+  friendly_name: Adlar Aurora III
+  firmware_profile: "active-sidecar 1.0.0 - slow reads + guarded writes"
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+  comment: "Active sidecar Modbus integration for Adlar Aurora III JÅN RS485"
+  project:
+    name: grotegehaktbal.adlar_aurora3_esphome
+    version: "1.0.0-active-sidecar"
+
+dashboard_import:
+  package_import_url: github://GroteGehaktBal/adlar-aurora3-esphome/adlar_aurora3_xiao_esp32c6_active_sidecar.yaml@main
+  import_full_config: true
+
+esp32:
+  board: seeed_xiao_esp32c6
+  variant: esp32c6
+  framework:
+    type: esp-idf
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  min_auth_mode: WPA2
+  ap:
+    ssid: "${friendly_name} fallback"
+    password: !secret fallback_ap_password
+
+captive_portal:
+
+api:
+  encryption:
+    key: !secret api_encryption_key
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+logger:
+  level: INFO
+  baud_rate: 0
+
+web_server:
+  port: 80
+  version: 3
+  sorting_groups:
+    - id: group_status
+      name: Status
+      sorting_weight: 10
+    - id: group_temperatures
+      name: Temperatures
+      sorting_weight: 20
+    - id: group_refrigerant
+      name: Refrigerant Circuit
+      sorting_weight: 25
+    - id: group_hydraulics
+      name: Hydraulics
+      sorting_weight: 30
+    - id: group_power
+      name: Power
+      sorting_weight: 40
+    - id: group_controls
+      name: Controls
+      sorting_weight: 80
+    - id: group_diagnostics
+      name: Diagnostics
+      sorting_weight: 90
+
+button:
+  - platform: restart
+    name: "Restart ESP"
+    entity_category: diagnostic
+
+switch:
+  - platform: template
+    id: active_sidecar_enabled
+    name: "Active sidecar reads enabled"
+    icon: "mdi:radar"
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    web_server:
+      sorting_group_id: group_controls
+
+  - platform: template
+    id: write_controls_enabled
+    name: "Enable write controls"
+    icon: "mdi:lock-open-variant"
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    entity_category: config
+    web_server:
+      sorting_group_id: group_controls
+
+  - platform: template
+    name: "DHW mode"
+    icon: "mdi:water-boiler"
+    lambda: |-
+      if (isnan(id(dhw_mode_current_raw).state)) return {};
+      return ((uint16_t) id(dhw_mode_current_raw).state) == 1;
+    turn_on_action:
+      - lambda: |-
+          if (!id(write_controls_enabled).state) {
+            id(active_sidecar_status).publish_state("write blocked: enable write controls first");
+            return;
+          }
+          id(pending_write_address) = 2102;
+          id(pending_write_value) = 1;
+          id(pending_write_requested) = true;
+          id(active_sidecar_status).publish_state("queued write: DHW mode on");
+    turn_off_action:
+      - lambda: |-
+          if (!id(write_controls_enabled).state) {
+            id(active_sidecar_status).publish_state("write blocked: enable write controls first");
+            return;
+          }
+          id(pending_write_address) = 2102;
+          id(pending_write_value) = 0;
+          id(pending_write_requested) = true;
+          id(active_sidecar_status).publish_state("queued write: DHW mode off");
+    web_server:
+      sorting_group_id: group_controls
+
+globals:
+  - id: last_rx_seen_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: outstanding_function
+    type: uint8_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: outstanding_address
+    type: uint16_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: outstanding_write_value
+    type: uint16_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: outstanding_sent_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: read_index
+    type: uint8_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: read_requests
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: read_replies
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: write_requests
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: write_replies
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: modbus_timeouts
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: bus_busy_skips
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: passive_frames_seen
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: ignored_valid_frames
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: last_function
+    type: uint16_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: last_address
+    type: uint16_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: last_raw
+    type: uint16_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: pending_write_requested
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  - id: pending_write_address
+    type: uint16_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: pending_write_value
+    type: uint16_t
+    restore_value: no
+    initial_value: "0"
+
+uart:
+  id: uart_rs485_sidecar
+  tx_pin: D6
+  rx_pin: D7
+  baud_rate: 9600
+  data_bits: 8
+  parity: NONE
+  stop_bits: 2
+  rx_buffer_size: 1024
+  debug:
+    direction: RX
+    dummy_receiver: true
+    after:
+      timeout: 6ms
+    sequence:
+      - lambda: |-
+          if (bytes.size() < 5) {
+            return;
+          }
+
+          id(last_rx_seen_ms) = millis();
+
+          auto crc16_range = [&](size_t start, size_t length) -> uint16_t {
+            uint16_t crc = 0xFFFF;
+            for (size_t pos = 0; pos < length; pos++) {
+              crc ^= (uint16_t) bytes[start + pos];
+              for (uint8_t i = 0; i < 8; i++) {
+                if ((crc & 0x0001) != 0) {
+                  crc >>= 1;
+                  crc ^= 0xA001;
+                } else {
+                  crc >>= 1;
+                }
+              }
+            }
+            return crc;
+          };
+
+          auto word_at = [](const std::vector<uint8_t> &data, size_t index) -> uint16_t {
+            return ((uint16_t) data[index] << 8) | data[index + 1];
+          };
+
+          auto has_valid_crc = [&](size_t start, size_t length) -> bool {
+            if (length < 5 || start + length > bytes.size()) {
+              return false;
+            }
+            const uint16_t expected_crc = crc16_range(start, length - 2);
+            const uint16_t actual_crc = (uint16_t) bytes[start + length - 2] |
+                                        ((uint16_t) bytes[start + length - 1] << 8);
+            return expected_crc == actual_crc;
+          };
+
+          auto publish_read_value = [](uint8_t function, uint16_t address, uint16_t raw) -> bool {
+            if (function == 0x04) {
+              switch (address) {
+                case 1:
+                  id(thermostat_type_raw).publish_state(raw);
+                  return true;
+                case 2:
+                  id(zone_config_raw).publish_state(raw);
+                  return true;
+                case 7:
+                  id(refrigerant_type_raw).publish_state(raw);
+                  return true;
+                case 9:
+                  id(effective_mode_raw).publish_state(raw);
+                  return true;
+                case 12:
+                  id(zone1_heating_max_temperature).publish_state(((int16_t) raw) * 0.1f);
+                  return true;
+                case 13:
+                  id(zone1_heating_min_temperature).publish_state(((int16_t) raw) * 0.1f);
+                  return true;
+                case 14:
+                  id(zone1_dhw_max_temperature).publish_state(((int16_t) raw) * 0.1f);
+                  return true;
+                case 15:
+                  id(zone1_dhw_min_temperature).publish_state(((int16_t) raw) * 0.1f);
+                  return true;
+                case 30:
+                  id(room_temperature_max).publish_state(((int16_t) raw) * 0.1f);
+                  return true;
+                case 31:
+                  id(room_temperature_min).publish_state(((int16_t) raw) * 0.1f);
+                  return true;
+                case 35:
+                  id(zone1_terminal_heating_raw).publish_state(raw);
+                  return true;
+                case 38:
+                  id(system_status_bits).publish_state(raw);
+                  return true;
+                case 39:
+                  id(external_heat_request_raw).publish_state(raw);
+                  return true;
+                case 40:
+                  id(room_temperature).publish_state(((int16_t) raw) * 0.1f);
+                  return true;
+                case 41:
+                  id(total_leaving_water_temperature).publish_state(((int16_t) raw) * 0.1f);
+                  return true;
+                case 42:
+                  id(inlet_water_temperature).publish_state(((int16_t) raw) * 0.1f);
+                  return true;
+                case 43:
+                  id(outlet_water_temperature).publish_state(((int16_t) raw) * 0.1f);
+                  return true;
+                case 44:
+                  id(buffer_tank_upper_temperature).publish_state(((int16_t) raw) * 0.1f);
+                  return true;
+                case 45:
+                  id(buffer_tank_lower_temperature).publish_state(((int16_t) raw) * 0.1f);
+                  return true;
+                case 46:
+                  id(dhw_tank_temperature).publish_state(((int16_t) raw) * 0.1f);
+                  return true;
+                case 47:
+                  id(zone2_mixing_station_temperature).publish_state(((int16_t) raw) * 0.1f);
+                  return true;
+                case 48:
+                  id(solar_water_heating_temperature).publish_state(((int16_t) raw) * 0.1f);
+                  return true;
+                case 49:
+                  id(outdoor_unit_coil_temperature).publish_state(((int16_t) raw) * 0.1f);
+                  return true;
+                case 50:
+                  id(ambient_temperature).publish_state(((int16_t) raw) * 0.1f);
+                  return true;
+                case 51:
+                  id(exv_outlet_temperature).publish_state(((int16_t) raw) * 0.1f);
+                  return true;
+                case 52:
+                  id(discharge_temperature).publish_state(((int16_t) raw) * 0.1f);
+                  return true;
+                case 53:
+                  id(suction_temperature).publish_state(((int16_t) raw) * 0.1f);
+                  return true;
+                case 56:
+                  id(target_outlet_temperature).publish_state(((int16_t) raw) * 0.1f);
+                  return true;
+                case 60:
+                  id(inlet_water_pressure).publish_state((raw) * 0.1f);
+                  return true;
+                case 61:
+                  id(outlet_water_pressure).publish_state((raw) * 0.1f);
+                  return true;
+                case 62:
+                  id(pump_pwm_output).publish_state(raw);
+                  return true;
+                case 63:
+                  id(pump_pwm_feedback).publish_state(raw);
+                  return true;
+                case 64:
+                  id(water_flow).publish_state((raw) * 0.1f);
+                  return true;
+                case 66:
+                  id(climate_curve_cooling_set).publish_state(((int16_t) raw) * 0.1f);
+                  return true;
+                case 67:
+                  id(climate_curve_heating_set).publish_state(((int16_t) raw) * 0.1f);
+                  return true;
+                case 70:
+                  id(eev_opening).publish_state(raw);
+                  return true;
+                case 72:
+                  id(fan_speed).publish_state(raw);
+                  return true;
+                case 74:
+                  id(ac_voltage).publish_state(raw);
+                  return true;
+                case 75:
+                  id(ac_current).publish_state((raw) * 0.1f);
+                  return true;
+                case 76:
+                  id(dc_bus_voltage).publish_state(raw);
+                  return true;
+                case 77:
+                  id(compressor_current).publish_state((raw) * 0.1f);
+                  return true;
+                case 78:
+                  id(compressor_target_frequency).publish_state(raw);
+                  return true;
+                case 79:
+                  id(compressor_actual_frequency).publish_state(raw);
+                  return true;
+                case 80:
+                  id(main_water_pump_status_raw).publish_state(raw);
+                  return true;
+                case 81:
+                  id(four_way_valve_status_raw).publish_state(raw);
+                  return true;
+                case 86:
+                  id(high_pressure).publish_state(raw);
+                  return true;
+                case 87:
+                  id(low_pressure).publish_state(raw);
+                  return true;
+                case 90:
+                  id(error_e01_e16).publish_state(raw);
+                  return true;
+                case 91:
+                  id(error_e17_e32).publish_state(raw);
+                  return true;
+                case 96:
+                  id(error_p01_p16).publish_state(raw);
+                  return true;
+                case 97:
+                  id(error_p17_p32).publish_state(raw);
+                  return true;
+                case 101:
+                  id(target_operation_mode_raw).publish_state(raw);
+                  return true;
+                case 103:
+                  id(actual_operation_mode_raw).publish_state(raw);
+                  return true;
+                default:
+                  return false;
+              }
+            }
+
+            if (function == 0x03) {
+              switch (address) {
+                case 2100:
+                  id(hvac_mode_current_raw).publish_state(raw);
+                  return true;
+                case 2101:
+                  id(zone_control_current_raw).publish_state(raw);
+                  return true;
+                case 2102:
+                  id(dhw_mode_current_raw).publish_state(raw);
+                  return true;
+                case 2103:
+                  id(function_a_raw).publish_state(raw);
+                  return true;
+                case 2105:
+                  id(dhw_setpoint_current).publish_state(((int16_t) raw) * 0.1f);
+                  return true;
+                case 2107:
+                  id(zone1_heating_setpoint_current).publish_state(((int16_t) raw) * 0.1f);
+                  return true;
+                case 2114:
+                  id(room_setpoint_current).publish_state(((int16_t) raw) * 0.1f);
+                  return true;
+                case 6035:
+                  id(observed_holding_6035_raw).publish_state(raw);
+                  return true;
+                default:
+                  return false;
+              }
+            }
+
+            return false;
+          };
+
+          auto process_frame = [&](const std::vector<uint8_t> &frame) {
+            const uint8_t slave = frame[0];
+            const uint8_t function = frame[1];
+            char message[144];
+
+            if (slave != 1) {
+              id(ignored_valid_frames) += 1;
+              return;
+            }
+
+            if ((function == 0x03 || function == 0x04) && frame.size() == 8) {
+              id(passive_frames_seen) += 1;
+              snprintf(message, sizeof(message), "passive request seen slave %u fc %u addr %u",
+                       slave, function, word_at(frame, 2));
+              id(active_sidecar_last_frame).publish_state(message);
+              return;
+            }
+
+            if (function == 0x06 && frame.size() == 8) {
+              const uint16_t address = word_at(frame, 2);
+              const uint16_t raw = word_at(frame, 4);
+              const uint32_t age_ms = millis() - id(outstanding_sent_ms);
+              const bool is_our_write_reply = id(outstanding_function) == 0x06 &&
+                                              address == id(outstanding_address) &&
+                                              raw == id(outstanding_write_value) &&
+                                              age_ms <= 1200;
+              if (!is_our_write_reply) {
+                id(passive_frames_seen) += 1;
+                return;
+              }
+
+              id(outstanding_function) = 0;
+              id(write_replies) += 1;
+              id(last_function) = function;
+              id(last_address) = address;
+              id(last_raw) = raw;
+              snprintf(message, sizeof(message), "write acknowledged slave %u addr %u raw %u age %u ms",
+                       slave, address, raw, (unsigned) age_ms);
+              id(active_sidecar_status).publish_state(message);
+              id(active_sidecar_last_frame).publish_state(message);
+              publish_read_value(0x03, address, raw);
+              ESP_LOGI("active_sidecar", "%s", message);
+              return;
+            }
+
+            if ((function != 0x03 && function != 0x04) || frame.size() < 7) {
+              id(ignored_valid_frames) += 1;
+              return;
+            }
+
+            const uint8_t byte_count = frame[2];
+            if (frame.size() != (size_t) byte_count + 5 || byte_count < 2) {
+              id(ignored_valid_frames) += 1;
+              return;
+            }
+
+            const uint16_t raw = word_at(frame, 3);
+            const uint32_t age_ms = millis() - id(outstanding_sent_ms);
+            const bool is_our_read_reply = function == id(outstanding_function) &&
+                                           id(outstanding_function) != 0 &&
+                                           age_ms <= 1200;
+
+            if (!is_our_read_reply) {
+              id(passive_frames_seen) += 1;
+              return;
+            }
+
+            const uint16_t address = id(outstanding_address);
+            id(outstanding_function) = 0;
+            id(read_replies) += 1;
+            id(last_function) = function;
+            id(last_address) = address;
+            id(last_raw) = raw;
+
+            snprintf(message, sizeof(message), "reply slave %u fc %u addr %u raw %u age %u ms",
+                     slave, function, address, raw, (unsigned) age_ms);
+            id(active_sidecar_last_frame).publish_state(message);
+
+            if (publish_read_value(function, address, raw)) {
+              snprintf(message, sizeof(message), "published fc %u addr %u raw %u", function, address, raw);
+              id(active_sidecar_status).publish_state(message);
+              ESP_LOGI("active_sidecar", "%s", message);
+            } else {
+              snprintf(message, sizeof(message), "reply fc %u addr %u raw %u has no mapped entity", function, address, raw);
+              id(active_sidecar_status).publish_state(message);
+              ESP_LOGI("active_sidecar", "%s", message);
+            }
+          };
+
+          size_t offset = 0;
+          while (offset + 5 <= bytes.size()) {
+            const uint8_t function = bytes[offset + 1];
+            bool parsed = false;
+
+            if ((function == 0x03 || function == 0x04) && offset + 5 <= bytes.size()) {
+              const uint8_t byte_count = bytes[offset + 2];
+              const size_t response_length = (size_t) byte_count + 5;
+              if (byte_count > 0 &&
+                  byte_count <= 240 &&
+                  offset + response_length <= bytes.size() &&
+                  has_valid_crc(offset, response_length)) {
+                std::vector<uint8_t> frame(bytes.begin() + offset,
+                                           bytes.begin() + offset + response_length);
+                process_frame(frame);
+                offset += response_length;
+                parsed = true;
+              }
+            }
+
+            if (!parsed &&
+                (function == 0x03 || function == 0x04 || function == 0x06) &&
+                offset + 8 <= bytes.size() &&
+                has_valid_crc(offset, 8)) {
+              std::vector<uint8_t> frame(bytes.begin() + offset, bytes.begin() + offset + 8);
+              process_frame(frame);
+              offset += 8;
+              parsed = true;
+            }
+
+            if (!parsed) {
+              offset += 1;
+            }
+          }
+
+interval:
+  - interval: 2s
+    then:
+      - lambda: |-
+          if (!id(active_sidecar_enabled).state) {
+            id(active_sidecar_status).publish_state("active sidecar disabled");
+            return;
+          }
+
+          if (!id(write_controls_enabled).state && id(pending_write_requested)) {
+            id(pending_write_requested) = false;
+            id(active_sidecar_status).publish_state("discarded queued write because write controls are disabled");
+          }
+
+          const uint32_t now = millis();
+
+          if (id(outstanding_function) != 0) {
+            const uint32_t age_ms = now - id(outstanding_sent_ms);
+            if (age_ms > 1500) {
+              id(modbus_timeouts) += 1;
+              char message[112];
+              snprintf(message, sizeof(message), "timeout fc %u addr %u after %u ms",
+                       id(outstanding_function), id(outstanding_address), (unsigned) age_ms);
+              id(active_sidecar_status).publish_state(message);
+              ESP_LOGW("active_sidecar", "%s", message);
+              id(outstanding_function) = 0;
+            }
+            return;
+          }
+
+          if (id(last_rx_seen_ms) != 0 && now - id(last_rx_seen_ms) < 350) {
+            id(bus_busy_skips) += 1;
+            id(active_sidecar_status).publish_state("waiting for quiet bus before sending");
+            return;
+          }
+
+          struct ReadRegister {
+            uint8_t function;
+            uint16_t address;
+          };
+
+          const ReadRegister reads[] = {
+            {0x04, 1},
+            {0x04, 2},
+            {0x04, 7},
+            {0x04, 9},
+            {0x04, 12},
+            {0x04, 13},
+            {0x04, 14},
+            {0x04, 15},
+            {0x04, 30},
+            {0x04, 31},
+            {0x04, 35},
+            {0x04, 38},
+            {0x04, 39},
+            {0x04, 40},
+            {0x04, 41},
+            {0x04, 42},
+            {0x04, 43},
+            {0x04, 44},
+            {0x04, 45},
+            {0x04, 46},
+            {0x04, 47},
+            {0x04, 48},
+            {0x04, 49},
+            {0x04, 50},
+            {0x04, 51},
+            {0x04, 52},
+            {0x04, 53},
+            {0x04, 56},
+            {0x04, 60},
+            {0x04, 61},
+            {0x04, 62},
+            {0x04, 63},
+            {0x04, 64},
+            {0x04, 66},
+            {0x04, 67},
+            {0x04, 70},
+            {0x04, 72},
+            {0x04, 74},
+            {0x04, 75},
+            {0x04, 76},
+            {0x04, 77},
+            {0x04, 78},
+            {0x04, 79},
+            {0x04, 80},
+            {0x04, 81},
+            {0x04, 86},
+            {0x04, 87},
+            {0x04, 90},
+            {0x04, 91},
+            {0x04, 96},
+            {0x04, 97},
+            {0x04, 101},
+            {0x04, 103},
+            {0x03, 2100},
+            {0x03, 2101},
+            {0x03, 2102},
+            {0x03, 2103},
+            {0x03, 2105},
+            {0x03, 2107},
+            {0x03, 2114},
+            {0x03, 6035},
+          };
+
+          uint8_t function = 0x04;
+          uint16_t address = 0;
+          uint16_t value = 0;
+          bool is_write = false;
+
+          if (id(pending_write_requested) && id(write_controls_enabled).state) {
+            function = 0x06;
+            address = id(pending_write_address);
+            value = id(pending_write_value);
+            is_write = true;
+            id(pending_write_requested) = false;
+          } else {
+            const size_t read_count = sizeof(reads) / sizeof(reads[0]);
+            const ReadRegister reg = reads[id(read_index) % read_count];
+            id(read_index) = (id(read_index) + 1) % read_count;
+            function = reg.function;
+            address = reg.address;
+            value = 1;
+          }
+
+          std::vector<uint8_t> frame = {
+            0x01,
+            function,
+            (uint8_t) (address >> 8),
+            (uint8_t) (address & 0xFF),
+            (uint8_t) (value >> 8),
+            (uint8_t) (value & 0xFF),
+            0x00,
+            0x00,
+          };
+
+          uint16_t crc = 0xFFFF;
+          for (size_t pos = 0; pos < 6; pos++) {
+            crc ^= (uint16_t) frame[pos];
+            for (uint8_t i = 0; i < 8; i++) {
+              if ((crc & 0x0001) != 0) {
+                crc >>= 1;
+                crc ^= 0xA001;
+              } else {
+                crc >>= 1;
+              }
+            }
+          }
+          frame[6] = (uint8_t) (crc & 0xFF);
+          frame[7] = (uint8_t) (crc >> 8);
+
+          id(outstanding_function) = function;
+          id(outstanding_address) = address;
+          id(outstanding_write_value) = value;
+          id(outstanding_sent_ms) = now;
+          id(last_function) = function;
+          id(last_address) = address;
+
+          if (is_write) {
+            id(write_requests) += 1;
+          } else {
+            id(read_requests) += 1;
+          }
+
+          id(uart_rs485_sidecar).write_array(frame.data(), frame.size());
+
+          char message[112];
+          if (is_write) {
+            snprintf(message, sizeof(message), "sent write slave 1 addr %u raw %u", address, value);
+          } else {
+            snprintf(message, sizeof(message), "sent read slave 1 fc %u addr %u", function, address);
+          }
+          id(active_sidecar_status).publish_state(message);
+          id(active_sidecar_last_frame).publish_state(message);
+          ESP_LOGI("active_sidecar", "%s", message);
+
+binary_sensor:
+  - platform: status
+    name: "ESP online"
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: template
+    name: "Heat pump oil return active"
+    lambda: |-
+      if (isnan(id(system_status_bits).state)) return {};
+      return ((uint16_t) id(system_status_bits).state & 0x0001) != 0;
+    device_class: running
+    web_server:
+      sorting_group_id: group_status
+
+  - platform: template
+    name: "Heat pump defrost active"
+    lambda: |-
+      if (isnan(id(system_status_bits).state)) return {};
+      return ((uint16_t) id(system_status_bits).state & 0x0002) != 0;
+    device_class: running
+    web_server:
+      sorting_group_id: group_status
+
+  - platform: template
+    name: "Heat pump anti-freezing active"
+    lambda: |-
+      if (isnan(id(system_status_bits).state)) return {};
+      return ((uint16_t) id(system_status_bits).state & 0x0004) != 0;
+    device_class: running
+    web_server:
+      sorting_group_id: group_status
+
+  - platform: template
+    name: "Heat pump disinfection active"
+    lambda: |-
+      if (isnan(id(system_status_bits).state)) return {};
+      return ((uint16_t) id(system_status_bits).state & 0x0010) != 0;
+    device_class: running
+    web_server:
+      sorting_group_id: group_status
+
+  - platform: template
+    name: "Heat pump ambient block active"
+    lambda: |-
+      if (isnan(id(system_status_bits).state)) return {};
+      return ((uint16_t) id(system_status_bits).state & 0x0800) != 0;
+    device_class: problem
+    web_server:
+      sorting_group_id: group_status
+
+  - platform: template
+    name: "Heat pump compressor running"
+    lambda: |-
+      if (isnan(id(compressor_actual_frequency).state)) return {};
+      return id(compressor_actual_frequency).state > 0.0f;
+    device_class: running
+    web_server:
+      sorting_group_id: group_status
+
+  - platform: template
+    name: "Heat pump main water pump on"
+    lambda: |-
+      if (isnan(id(main_water_pump_status_raw).state)) return {};
+      return ((uint16_t) id(main_water_pump_status_raw).state) == 1;
+    device_class: running
+    web_server:
+      sorting_group_id: group_status
+
+  - platform: template
+    name: "Heat pump cooling cycle valve"
+    lambda: |-
+      if (isnan(id(four_way_valve_status_raw).state)) return {};
+      return ((uint16_t) id(four_way_valve_status_raw).state) == 1;
+    web_server:
+      sorting_group_id: group_status
+
+  - platform: template
+    name: "Heat pump cooling mode effective"
+    lambda: |-
+      if (isnan(id(effective_mode_raw).state)) return {};
+      return ((uint16_t) id(effective_mode_raw).state & 0x0001) != 0;
+    web_server:
+      sorting_group_id: group_status
+
+  - platform: template
+    name: "Heat pump heating mode effective"
+    lambda: |-
+      if (isnan(id(effective_mode_raw).state)) return {};
+      return ((uint16_t) id(effective_mode_raw).state & 0x0002) != 0;
+    web_server:
+      sorting_group_id: group_status
+
+  - platform: template
+    name: "Heat pump DHW mode effective"
+    lambda: |-
+      if (isnan(id(effective_mode_raw).state)) return {};
+      return ((uint16_t) id(effective_mode_raw).state & 0x0004) != 0;
+    web_server:
+      sorting_group_id: group_status
+
+  - platform: template
+    name: "Heat pump E-error active"
+    lambda: |-
+      if (isnan(id(error_e01_e16).state) || isnan(id(error_e17_e32).state)) return {};
+      return id(error_e01_e16).state > 0.0f || id(error_e17_e32).state > 0.0f;
+    device_class: problem
+    web_server:
+      sorting_group_id: group_status
+
+  - platform: template
+    name: "Heat pump P-error active"
+    lambda: |-
+      if (isnan(id(error_p01_p16).state) || isnan(id(error_p17_p32).state)) return {};
+      return id(error_p01_p16).state > 0.0f || id(error_p17_p32).state > 0.0f;
+    device_class: problem
+    web_server:
+      sorting_group_id: group_status
+
+sensor:
+  - platform: wifi_signal
+    name: "ESP WiFi signal"
+    update_interval: 60s
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: uptime
+    name: "ESP uptime"
+    update_interval: 60s
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: template
+    name: "Active sidecar read requests"
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    lambda: |-
+      return id(read_requests);
+    update_interval: 10s
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: template
+    name: "Active sidecar read replies"
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    lambda: |-
+      return id(read_replies);
+    update_interval: 10s
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: template
+    name: "Active sidecar write requests"
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    lambda: |-
+      return id(write_requests);
+    update_interval: 10s
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: template
+    name: "Active sidecar write replies"
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    lambda: |-
+      return id(write_replies);
+    update_interval: 10s
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: template
+    name: "Active sidecar timeouts"
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    lambda: |-
+      return id(modbus_timeouts);
+    update_interval: 10s
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: template
+    name: "Active sidecar bus busy skips"
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    lambda: |-
+      return id(bus_busy_skips);
+    update_interval: 10s
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: template
+    name: "Active sidecar passive frames seen"
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    lambda: |-
+      return id(passive_frames_seen);
+    update_interval: 10s
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: template
+    name: "Active sidecar ignored valid frames"
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    lambda: |-
+      return id(ignored_valid_frames);
+    update_interval: 10s
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: template
+    name: "Active sidecar last function"
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    lambda: |-
+      return id(last_function);
+    update_interval: 10s
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: template
+    name: "Active sidecar last address"
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    lambda: |-
+      return id(last_address);
+    update_interval: 10s
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: template
+    name: "Active sidecar last raw value"
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    lambda: |-
+      return id(last_raw);
+    update_interval: 10s
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: template
+    id: thermostat_type_raw
+    name: "Thermostat type raw"
+    accuracy_decimals: 0
+    state_class: measurement
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+  - platform: template
+    id: zone_config_raw
+    name: "Zone config raw"
+    accuracy_decimals: 0
+    state_class: measurement
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+  - platform: template
+    id: refrigerant_type_raw
+    name: "Refrigerant type raw"
+    accuracy_decimals: 0
+    state_class: measurement
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+  - platform: template
+    id: effective_mode_raw
+    name: "Effective mode raw"
+    accuracy_decimals: 0
+    state_class: measurement
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_status
+  - platform: template
+    id: zone1_heating_max_temperature
+    name: "Zone 1 heating max temperature"
+    accuracy_decimals: 1
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    web_server:
+      sorting_group_id: group_controls
+  - platform: template
+    id: zone1_heating_min_temperature
+    name: "Zone 1 heating min temperature"
+    accuracy_decimals: 1
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    web_server:
+      sorting_group_id: group_controls
+  - platform: template
+    id: zone1_dhw_max_temperature
+    name: "Zone 1 DHW max temperature"
+    accuracy_decimals: 1
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    web_server:
+      sorting_group_id: group_controls
+  - platform: template
+    id: zone1_dhw_min_temperature
+    name: "Zone 1 DHW min temperature"
+    accuracy_decimals: 1
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    web_server:
+      sorting_group_id: group_controls
+  - platform: template
+    id: room_temperature_max
+    name: "Room temperature max"
+    accuracy_decimals: 1
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    web_server:
+      sorting_group_id: group_controls
+  - platform: template
+    id: room_temperature_min
+    name: "Room temperature min"
+    accuracy_decimals: 1
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    web_server:
+      sorting_group_id: group_controls
+  - platform: template
+    id: zone1_terminal_heating_raw
+    name: "Zone 1 terminal heating raw"
+    accuracy_decimals: 0
+    state_class: measurement
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+  - platform: template
+    id: system_status_bits
+    name: "System status bits"
+    accuracy_decimals: 0
+    state_class: measurement
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+  - platform: template
+    id: external_heat_request_raw
+    name: "External heat request raw"
+    accuracy_decimals: 0
+    state_class: measurement
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+  - platform: template
+    id: room_temperature
+    name: "Room temperature"
+    accuracy_decimals: 1
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    web_server:
+      sorting_group_id: group_temperatures
+  - platform: template
+    id: total_leaving_water_temperature
+    name: "Total leaving water temperature"
+    accuracy_decimals: 1
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    web_server:
+      sorting_group_id: group_temperatures
+  - platform: template
+    id: inlet_water_temperature
+    name: "Inlet water temperature"
+    accuracy_decimals: 1
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    web_server:
+      sorting_group_id: group_temperatures
+  - platform: template
+    id: outlet_water_temperature
+    name: "Outlet water temperature"
+    accuracy_decimals: 1
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    web_server:
+      sorting_group_id: group_temperatures
+  - platform: template
+    id: buffer_tank_upper_temperature
+    name: "Buffer tank upper temperature"
+    accuracy_decimals: 1
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    web_server:
+      sorting_group_id: group_temperatures
+  - platform: template
+    id: buffer_tank_lower_temperature
+    name: "Buffer tank lower temperature"
+    accuracy_decimals: 1
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    web_server:
+      sorting_group_id: group_temperatures
+  - platform: template
+    id: dhw_tank_temperature
+    name: "DHW tank temperature"
+    accuracy_decimals: 1
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    web_server:
+      sorting_group_id: group_temperatures
+  - platform: template
+    id: zone2_mixing_station_temperature
+    name: "Zone 2 mixing station temperature"
+    accuracy_decimals: 1
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    web_server:
+      sorting_group_id: group_temperatures
+  - platform: template
+    id: solar_water_heating_temperature
+    name: "Solar water heating temperature"
+    accuracy_decimals: 1
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    web_server:
+      sorting_group_id: group_temperatures
+  - platform: template
+    id: outdoor_unit_coil_temperature
+    name: "Outdoor unit coil temperature"
+    accuracy_decimals: 1
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    web_server:
+      sorting_group_id: group_refrigerant
+  - platform: template
+    id: ambient_temperature
+    name: "Ambient temperature"
+    accuracy_decimals: 1
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    web_server:
+      sorting_group_id: group_temperatures
+  - platform: template
+    id: exv_outlet_temperature
+    name: "EXV outlet temperature"
+    accuracy_decimals: 1
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    web_server:
+      sorting_group_id: group_refrigerant
+  - platform: template
+    id: discharge_temperature
+    name: "Discharge temperature"
+    accuracy_decimals: 1
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    web_server:
+      sorting_group_id: group_refrigerant
+  - platform: template
+    id: suction_temperature
+    name: "Suction temperature"
+    accuracy_decimals: 1
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    web_server:
+      sorting_group_id: group_refrigerant
+  - platform: template
+    id: target_outlet_temperature
+    name: "Target outlet temperature"
+    accuracy_decimals: 1
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    web_server:
+      sorting_group_id: group_temperatures
+  - platform: template
+    id: inlet_water_pressure
+    name: "Inlet water pressure"
+    accuracy_decimals: 1
+    unit_of_measurement: "bar"
+    device_class: pressure
+    state_class: measurement
+    web_server:
+      sorting_group_id: group_hydraulics
+  - platform: template
+    id: outlet_water_pressure
+    name: "Outlet water pressure"
+    accuracy_decimals: 1
+    unit_of_measurement: "bar"
+    device_class: pressure
+    state_class: measurement
+    web_server:
+      sorting_group_id: group_hydraulics
+  - platform: template
+    id: pump_pwm_output
+    name: "Pump PWM output"
+    accuracy_decimals: 0
+    unit_of_measurement: "%"
+    state_class: measurement
+    web_server:
+      sorting_group_id: group_hydraulics
+  - platform: template
+    id: pump_pwm_feedback
+    name: "Pump PWM feedback"
+    accuracy_decimals: 0
+    unit_of_measurement: "%"
+    state_class: measurement
+    web_server:
+      sorting_group_id: group_hydraulics
+  - platform: template
+    id: water_flow
+    name: "Water flow"
+    accuracy_decimals: 1
+    unit_of_measurement: "m³/h"
+    device_class: volume_flow_rate
+    state_class: measurement
+    web_server:
+      sorting_group_id: group_hydraulics
+  - platform: template
+    id: climate_curve_cooling_set
+    name: "Climate curve cooling set"
+    accuracy_decimals: 1
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    web_server:
+      sorting_group_id: group_controls
+  - platform: template
+    id: climate_curve_heating_set
+    name: "Climate curve heating set"
+    accuracy_decimals: 1
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    web_server:
+      sorting_group_id: group_controls
+  - platform: template
+    id: eev_opening
+    name: "EEV opening"
+    accuracy_decimals: 0
+    unit_of_measurement: "steps"
+    state_class: measurement
+    web_server:
+      sorting_group_id: group_refrigerant
+  - platform: template
+    id: fan_speed
+    name: "Fan speed"
+    accuracy_decimals: 0
+    unit_of_measurement: "rpm"
+    state_class: measurement
+    web_server:
+      sorting_group_id: group_status
+  - platform: template
+    id: ac_voltage
+    name: "AC voltage"
+    accuracy_decimals: 0
+    unit_of_measurement: "V"
+    device_class: voltage
+    state_class: measurement
+    web_server:
+      sorting_group_id: group_power
+  - platform: template
+    id: ac_current
+    name: "AC current"
+    accuracy_decimals: 1
+    unit_of_measurement: "A"
+    device_class: current
+    state_class: measurement
+    web_server:
+      sorting_group_id: group_power
+  - platform: template
+    id: dc_bus_voltage
+    name: "DC bus voltage"
+    accuracy_decimals: 0
+    unit_of_measurement: "V"
+    device_class: voltage
+    state_class: measurement
+    web_server:
+      sorting_group_id: group_power
+  - platform: template
+    id: compressor_current
+    name: "Compressor current"
+    accuracy_decimals: 1
+    unit_of_measurement: "A"
+    device_class: current
+    state_class: measurement
+    web_server:
+      sorting_group_id: group_power
+  - platform: template
+    id: compressor_target_frequency
+    name: "Compressor target frequency"
+    accuracy_decimals: 0
+    unit_of_measurement: "Hz"
+    device_class: frequency
+    state_class: measurement
+    web_server:
+      sorting_group_id: group_status
+  - platform: template
+    id: compressor_actual_frequency
+    name: "Compressor actual frequency"
+    accuracy_decimals: 0
+    unit_of_measurement: "Hz"
+    device_class: frequency
+    state_class: measurement
+    web_server:
+      sorting_group_id: group_status
+  - platform: template
+    id: main_water_pump_status_raw
+    name: "Main water pump status raw"
+    accuracy_decimals: 0
+    state_class: measurement
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+  - platform: template
+    id: four_way_valve_status_raw
+    name: "Four-way valve status raw"
+    accuracy_decimals: 0
+    state_class: measurement
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+  - platform: template
+    id: high_pressure
+    name: "High pressure"
+    accuracy_decimals: 0
+    unit_of_measurement: "kPa"
+    device_class: pressure
+    state_class: measurement
+    web_server:
+      sorting_group_id: group_refrigerant
+  - platform: template
+    id: low_pressure
+    name: "Low pressure"
+    accuracy_decimals: 0
+    unit_of_measurement: "kPa"
+    device_class: pressure
+    state_class: measurement
+    web_server:
+      sorting_group_id: group_refrigerant
+  - platform: template
+    id: error_e01_e16
+    name: "Error E01-E16 raw"
+    accuracy_decimals: 0
+    state_class: measurement
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+  - platform: template
+    id: error_e17_e32
+    name: "Error E17-E32 raw"
+    accuracy_decimals: 0
+    state_class: measurement
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+  - platform: template
+    id: error_p01_p16
+    name: "Error P01-P16 raw"
+    accuracy_decimals: 0
+    state_class: measurement
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+  - platform: template
+    id: error_p17_p32
+    name: "Error P17-P32 raw"
+    accuracy_decimals: 0
+    state_class: measurement
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+  - platform: template
+    id: target_operation_mode_raw
+    name: "Target operation mode raw"
+    accuracy_decimals: 0
+    state_class: measurement
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+  - platform: template
+    id: actual_operation_mode_raw
+    name: "Actual operation mode raw"
+    accuracy_decimals: 0
+    state_class: measurement
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+  - platform: template
+    id: hvac_mode_current_raw
+    name: "HVAC mode current raw"
+    accuracy_decimals: 0
+    state_class: measurement
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_controls
+  - platform: template
+    id: zone_control_current_raw
+    name: "Zone control current raw"
+    accuracy_decimals: 0
+    state_class: measurement
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_controls
+  - platform: template
+    id: dhw_mode_current_raw
+    name: "DHW mode current raw"
+    accuracy_decimals: 0
+    state_class: measurement
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_controls
+  - platform: template
+    id: function_a_raw
+    name: "Function A raw"
+    accuracy_decimals: 0
+    state_class: measurement
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+  - platform: template
+    id: dhw_setpoint_current
+    name: "DHW setpoint current"
+    accuracy_decimals: 1
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    web_server:
+      sorting_group_id: group_controls
+  - platform: template
+    id: zone1_heating_setpoint_current
+    name: "Zone 1 heating setpoint current"
+    accuracy_decimals: 1
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    web_server:
+      sorting_group_id: group_controls
+  - platform: template
+    id: room_setpoint_current
+    name: "Room setpoint current"
+    accuracy_decimals: 1
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    web_server:
+      sorting_group_id: group_controls
+  - platform: template
+    id: observed_holding_6035_raw
+    name: "Observed holding 6035 raw"
+    accuracy_decimals: 0
+    state_class: measurement
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: template
+    id: water_delta_t
+    name: "Water delta T"
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    update_interval: 10s
+    lambda: |-
+      if (isnan(id(outlet_water_temperature).state) || isnan(id(inlet_water_temperature).state)) {
+        return NAN;
+      }
+      return id(outlet_water_temperature).state - id(inlet_water_temperature).state;
+    web_server:
+      sorting_group_id: group_temperatures
+
+  - platform: template
+    id: estimated_heating_power
+    name: "Estimated heating power"
+    unit_of_measurement: "kW"
+    device_class: power
+    state_class: measurement
+    accuracy_decimals: 2
+    update_interval: 10s
+    lambda: |-
+      if (isnan(id(water_flow).state) || isnan(id(water_delta_t).state) || isnan(id(compressor_actual_frequency).state)) {
+        return NAN;
+      }
+      if (id(compressor_actual_frequency).state <= 0.0f || id(water_flow).state <= 0.3f || id(water_delta_t).state <= 0.5f) {
+        return 0.0f;
+      }
+      return 1.163f * id(water_flow).state * id(water_delta_t).state;
+    web_server:
+      sorting_group_id: group_power
+
+  - platform: template
+    id: estimated_cooling_power
+    name: "Estimated cooling power"
+    unit_of_measurement: "kW"
+    device_class: power
+    state_class: measurement
+    accuracy_decimals: 2
+    update_interval: 10s
+    lambda: |-
+      if (isnan(id(water_flow).state) || isnan(id(water_delta_t).state) || isnan(id(compressor_actual_frequency).state)) {
+        return NAN;
+      }
+      if (id(compressor_actual_frequency).state <= 0.0f || id(water_flow).state <= 0.3f || id(water_delta_t).state >= -0.5f) {
+        return 0.0f;
+      }
+      return -1.163f * id(water_flow).state * id(water_delta_t).state;
+    web_server:
+      sorting_group_id: group_power
+
+  - platform: template
+    id: estimated_electrical_power
+    name: "Estimated electrical power"
+    unit_of_measurement: "kW"
+    device_class: power
+    state_class: measurement
+    accuracy_decimals: 2
+    update_interval: 10s
+    lambda: |-
+      if (!isnan(id(ac_voltage).state) && !isnan(id(ac_current).state) && id(ac_voltage).state > 0.0f && id(ac_current).state > 0.0f) {
+        return id(ac_voltage).state * id(ac_current).state / 1000.0f;
+      }
+      return NAN;
+    web_server:
+      sorting_group_id: group_power
+
+  - platform: template
+    name: "Estimated COP"
+    state_class: measurement
+    accuracy_decimals: 2
+    update_interval: 10s
+    lambda: |-
+      const float thermal = id(estimated_heating_power).state + id(estimated_cooling_power).state;
+      if (isnan(thermal) || isnan(id(estimated_electrical_power).state) || thermal <= 0.0f || id(estimated_electrical_power).state <= 0.05f) {
+        return NAN;
+      }
+      return thermal / id(estimated_electrical_power).state;
+    web_server:
+      sorting_group_id: group_power
+
+number:
+  - platform: template
+    name: "Zone 1 heating setpoint"
+    id: zone1_heating_setpoint_control
+    min_value: 18
+    max_value: 50
+    step: 1
+    mode: box
+    unit_of_measurement: "°C"
+    device_class: temperature
+    lambda: |-
+      if (isnan(id(zone1_heating_setpoint_current).state)) return {};
+      return id(zone1_heating_setpoint_current).state;
+    set_action:
+      - lambda: |-
+          if (!id(write_controls_enabled).state) {
+            id(active_sidecar_status).publish_state("write blocked: enable write controls first");
+            return;
+          }
+          id(pending_write_address) = 2107;
+          id(pending_write_value) = (uint16_t) roundf(x * 10.0f);
+          id(pending_write_requested) = true;
+          id(active_sidecar_status).publish_state("queued write: zone 1 heating setpoint");
+    web_server:
+      sorting_group_id: group_controls
+
+  - platform: template
+    name: "DHW setpoint"
+    id: dhw_setpoint_control
+    min_value: 30
+    max_value: 60
+    step: 1
+    mode: box
+    unit_of_measurement: "°C"
+    device_class: temperature
+    lambda: |-
+      if (isnan(id(dhw_setpoint_current).state)) return {};
+      return id(dhw_setpoint_current).state;
+    set_action:
+      - lambda: |-
+          if (!id(write_controls_enabled).state) {
+            id(active_sidecar_status).publish_state("write blocked: enable write controls first");
+            return;
+          }
+          id(pending_write_address) = 2105;
+          id(pending_write_value) = (uint16_t) roundf(x * 10.0f);
+          id(pending_write_requested) = true;
+          id(active_sidecar_status).publish_state("queued write: DHW setpoint");
+    web_server:
+      sorting_group_id: group_controls
+
+  - platform: template
+    name: "Room temperature setpoint"
+    id: room_temperature_setpoint_control
+    min_value: 10
+    max_value: 30
+    step: 0.5
+    mode: box
+    unit_of_measurement: "°C"
+    device_class: temperature
+    lambda: |-
+      if (isnan(id(room_setpoint_current).state)) return {};
+      return id(room_setpoint_current).state;
+    set_action:
+      - lambda: |-
+          if (!id(write_controls_enabled).state) {
+            id(active_sidecar_status).publish_state("write blocked: enable write controls first");
+            return;
+          }
+          id(pending_write_address) = 2114;
+          id(pending_write_value) = (uint16_t) roundf(x * 10.0f);
+          id(pending_write_requested) = true;
+          id(active_sidecar_status).publish_state("queued write: room temperature setpoint");
+    web_server:
+      sorting_group_id: group_controls
+
+select:
+  - platform: template
+    name: "HVAC mode"
+    id: hvac_mode_control
+    options:
+      - "Cooling"
+      - "Heating"
+      - "Auto"
+    lambda: |-
+      if (isnan(id(hvac_mode_current_raw).state)) return {};
+      const uint16_t mode = (uint16_t) id(hvac_mode_current_raw).state;
+      if (mode == 1) return std::string("Cooling");
+      if (mode == 2) return std::string("Heating");
+      if (mode == 4) return std::string("Auto");
+      return {};
+    set_action:
+      - lambda: |-
+          if (!id(write_controls_enabled).state) {
+            id(active_sidecar_status).publish_state("write blocked: enable write controls first");
+            return;
+          }
+          uint16_t raw = 0;
+          if (x == "Cooling") raw = 1;
+          if (x == "Heating") raw = 2;
+          if (x == "Auto") raw = 4;
+          if (raw == 0) return;
+          id(pending_write_address) = 2100;
+          id(pending_write_value) = raw;
+          id(pending_write_requested) = true;
+          id(active_sidecar_status).publish_state("queued write: HVAC mode");
+    web_server:
+      sorting_group_id: group_controls
+
+  - platform: template
+    name: "Zone control"
+    id: zone_control
+    options:
+      - "All off"
+      - "Zone 1 on"
+      - "Zone 2 on"
+      - "All zones on"
+    lambda: |-
+      if (isnan(id(zone_control_current_raw).state)) return {};
+      const uint16_t mode = (uint16_t) id(zone_control_current_raw).state;
+      if (mode == 0) return std::string("All off");
+      if (mode == 1) return std::string("Zone 1 on");
+      if (mode == 2) return std::string("Zone 2 on");
+      if (mode == 3) return std::string("All zones on");
+      return {};
+    set_action:
+      - lambda: |-
+          if (!id(write_controls_enabled).state) {
+            id(active_sidecar_status).publish_state("write blocked: enable write controls first");
+            return;
+          }
+          uint16_t raw = 65535;
+          if (x == "All off") raw = 0;
+          if (x == "Zone 1 on") raw = 1;
+          if (x == "Zone 2 on") raw = 2;
+          if (x == "All zones on") raw = 3;
+          if (raw == 65535) return;
+          id(pending_write_address) = 2101;
+          id(pending_write_value) = raw;
+          id(pending_write_requested) = true;
+          id(active_sidecar_status).publish_state("queued write: zone control");
+    web_server:
+      sorting_group_id: group_controls
+
+text_sensor:
+  - platform: wifi_info
+    ip_address:
+      name: "ESP IP"
+      entity_category: diagnostic
+      web_server:
+        sorting_group_id: group_diagnostics
+    ssid:
+      name: "ESP WiFi SSID"
+      entity_category: diagnostic
+      web_server:
+        sorting_group_id: group_diagnostics
+
+  - platform: template
+    name: "Firmware profile"
+    entity_category: diagnostic
+    update_interval: 60s
+    lambda: |-
+      return std::string("${firmware_profile}");
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: template
+    id: active_sidecar_status
+    name: "Active sidecar status"
+    update_interval: never
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: template
+    id: active_sidecar_last_frame
+    name: "Active sidecar last frame"
+    update_interval: never
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: template
+    name: "Heat pump status text"
+    update_interval: 10s
+    lambda: |-
+      if (isnan(id(system_status_bits).state)) {
+        return std::string("No Modbus data");
+      }
+      const uint16_t status = (uint16_t) id(system_status_bits).state;
+      const bool oil = status & 0x0001;
+      const bool defrost = status & 0x0002;
+      const bool anti_freeze = status & 0x0004;
+      const bool disinfection = status & 0x0010;
+      const bool ambient_block = status & 0x0800;
+      const bool compressor = !isnan(id(compressor_actual_frequency).state) && id(compressor_actual_frequency).state > 0.0f;
+      const bool pump = !isnan(id(main_water_pump_status_raw).state) && ((uint16_t) id(main_water_pump_status_raw).state) == 1;
+
+      if (defrost) return std::string("Defrosting");
+      if (oil) return std::string("Oil return");
+      if (anti_freeze) return std::string("Anti-freezing");
+      if (disinfection) return std::string("Disinfection");
+      if (ambient_block) return std::string("Ambient temperature block");
+      if (compressor && !isnan(id(water_delta_t).state) && id(water_delta_t).state > 0.5f) return std::string("Heating");
+      if (compressor && !isnan(id(water_delta_t).state) && id(water_delta_t).state < -0.5f) return std::string("Cooling");
+      if (compressor) return std::string("Compressor running");
+      if (pump) return std::string("Pump circulation");
+      return std::string("Idle");
+    web_server:
+      sorting_group_id: group_status
+
+  - platform: template
+    name: "HVAC mode text"
+    update_interval: 10s
+    lambda: |-
+      if (isnan(id(hvac_mode_current_raw).state)) {
+        return std::string("No Modbus data");
+      }
+      const uint16_t mode = (uint16_t) id(hvac_mode_current_raw).state;
+      if (mode == 1) return std::string("Cooling");
+      if (mode == 2) return std::string("Heating");
+      if (mode == 4) return std::string("Auto");
+      char buffer[32];
+      snprintf(buffer, sizeof(buffer), "Unknown (%u)", mode);
+      return std::string(buffer);
+    web_server:
+      sorting_group_id: group_status
+
+  - platform: template
+    name: "Zone control text"
+    update_interval: 10s
+    lambda: |-
+      if (isnan(id(zone_control_current_raw).state)) {
+        return std::string("No Modbus data");
+      }
+      const uint16_t mode = (uint16_t) id(zone_control_current_raw).state;
+      if (mode == 0) return std::string("All off");
+      if (mode == 1) return std::string("Zone 1 on");
+      if (mode == 2) return std::string("Zone 2 on");
+      if (mode == 3) return std::string("All zones on");
+      char buffer[32];
+      snprintf(buffer, sizeof(buffer), "Unknown (%u)", mode);
+      return std::string(buffer);
+    web_server:
+      sorting_group_id: group_status
+
+  - platform: template
+    name: "Heat pump fault summary"
+    update_interval: 10s
+    lambda: |-
+      if (isnan(id(error_e01_e16).state) || isnan(id(error_e17_e32).state) || isnan(id(error_p01_p16).state) || isnan(id(error_p17_p32).state)) {
+        return std::string("No Modbus data");
+      }
+      if (id(error_e01_e16).state == 0 && id(error_e17_e32).state == 0 && id(error_p01_p16).state == 0 && id(error_p17_p32).state == 0) {
+        return std::string("No active error bits");
+      }
+      char buffer[112];
+      snprintf(buffer, sizeof(buffer), "E01-E16=%u, E17-E32=%u, P01-P16=%u, P17-P32=%u",
+               (unsigned) id(error_e01_e16).state,
+               (unsigned) id(error_e17_e32).state,
+               (unsigned) id(error_p01_p16).state,
+               (unsigned) id(error_p17_p32).state);
+      return std::string(buffer);
+    web_server:
+      sorting_group_id: group_status

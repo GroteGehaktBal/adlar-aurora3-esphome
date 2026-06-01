@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.0 - 2026-06-01
+
+- Added `adlar_aurora3_xiao_esp32c6_active_sidecar.yaml`, a complete custom active sidecar profile for shared JÅN RS485 buses.
+- The active sidecar uses quiet-window scheduling, reads one register per request, and maps the full current input/holding register set into Home Assistant entities.
+- Added guarded write controls for HVAC mode, DHW mode, zone control, DHW setpoint, zone 1 heating setpoint, and room setpoint.
+- Added diagnostics for read/write requests, replies, timeouts, passive frames, bus-busy skips, and last observed Modbus frame.
+- Added derived status, binary fault indicators, estimated thermal/electrical power, and estimated COP entities.
+- Updated README, troubleshooting, and register-map documentation for the working active sidecar workflow.
+
 ## 0.8.0 - 2026-06-01
 
 - Added a slow read-only active probe firmware for installations where passive monitoring sees valid response frames but not the matching request frames.

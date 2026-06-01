@@ -7,8 +7,8 @@ This list is intentionally conservative. Heat pump integrations should become mo
 - Collect real hardware test reports for different Adlar/JÅN module revisions.
 - Confirm whether the JÅN RS485 port is a dedicated slave/server port or a shared bus in common installations.
 - Add a verified compatibility table.
-- Add an optional read-only YAML variant with all write controls removed.
-- Add an optional advanced YAML variant for users who explicitly want disabled-by-default curve controls.
+- Validate the active sidecar profile on more installations and transceiver modules.
+- Add a slim read-only sidecar variant once the full active sidecar is stable across more homes.
 - Document known-good RS485 transceiver modules.
 - Add screenshots of the ESPHome entities and Home Assistant device page.
 
@@ -19,14 +19,15 @@ This list is intentionally conservative. Heat pump integrations should become mo
 - Verify pump PWM unit and range.
 - Verify total energy counter wrap/reset behavior.
 - Expand the fault bit mapping with confirmed descriptions.
-- Add optional sensors for extra registers only after real-world validation.
+- Confirm which optional sensors are present on common one-zone, two-zone, buffer-tank, and DHW setups.
 
 ## Home Assistant Experience
 
 - Add suggested Lovelace dashboard snippets.
-- Add template sensors for COP estimation when electrical input power is confirmed.
+- Add a polished Home Assistant dashboard example for the active sidecar profile.
 - Add automations/examples for read-only alerts.
 - Add safety-first example automations for setpoint changes.
+- Consider a Home Assistant `climate` abstraction only after mode and setpoint write behavior is confirmed on multiple installations.
 
 ## Project Quality
 

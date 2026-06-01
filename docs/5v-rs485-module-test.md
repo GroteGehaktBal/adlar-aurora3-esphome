@@ -121,4 +121,11 @@ It is still read-only, but it sends many requests. Use it only while watching th
 
 If the scanner completes a pass with `Valid replies in this pass: 0` in both A/B orientations, the remaining likely causes are physical bus wiring/topology, the RS485 board not driving/receiving correctly on the differential side, or the JÅN terminal not being the reachable Modbus slave bus expected by the public community examples.
 
+Before interpreting a zero-reply scan, check the startup line:
+
+- `Arduino D10/RX idle state: HIGH (expected)` means the TTL receive line is electrically plausible.
+- `Arduino D10/RX idle state: LOW (bad)` means the receive line is held low; fix TTL wiring or module power before testing JÅN again.
+
+If you short module `TXD` and `RXD` with JÅN disconnected, the scanner should print `exact echo`. That proves the Arduino can send and receive through the TTL wiring, but it is not a heat-pump reply.
+
 For a permanent ESP32 installation, prefer a true 3.3V RS485 transceiver such as an SP3485/MAX3485-based module, an isolated 3.3V RS485 module, or a proven external RS485 gateway.

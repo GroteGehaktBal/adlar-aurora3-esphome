@@ -33,6 +33,7 @@ constexpr uint8_t RS485_TX_PIN = 11;
 constexpr uint32_t RS485_BAUD = 9600;
 constexpr uint16_t REPLY_TIMEOUT_MS = 800;
 constexpr uint16_t BETWEEN_REQUESTS_MS = 1200;
+constexpr bool PRINT_NO_REPLY = true;
 
 SoftwareSerial rs485(RS485_RX_PIN, RS485_TX_PIN);
 
@@ -186,6 +187,20 @@ bool looks_like_modbus_reply(uint8_t slave, const uint8_t *reply, uint8_t length
   return expected_crc == actual_crc;
 }
 
+bool is_exact_echo(const uint8_t *request, uint8_t request_length, const uint8_t *reply, uint8_t reply_length) {
+  if (request_length != reply_length) {
+    return false;
+  }
+
+  for (uint8_t i = 0; i < request_length; i++) {
+    if (request[i] != reply[i]) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 void setup() {
   Serial.begin(115200);
   while (!Serial) {
@@ -234,7 +249,9 @@ void loop() {
         Serial.print(F("RX: "));
         print_hex_buffer(reply, reply_length);
 
-        if (looks_like_modbus_reply(slave, reply, reply_length)) {
+        if (is_exact_echo(request, sizeof(request), reply, reply_length)) {
+          Serial.print(F("  <-- exact echo; TTL TXD/RXD loopback is working, but this is not a JAN reply"));
+        } else if (looks_like_modbus_reply(slave, reply, reply_length)) {
           Serial.print(F("  <-- valid Modbus CRC"));
           replies++;
         } else if (all_bytes_are_zero(reply, reply_length)) {
@@ -245,6 +262,8 @@ void loop() {
         }
 
         Serial.println();
+      } else if (PRINT_NO_REPLY) {
+        Serial.println(F("RX: no reply"));
       }
 
       delay(BETWEEN_REQUESTS_MS);

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.7 - 2026-06-01
+
+- Made the Arduino slave scanner print explicit `RX: no reply` lines and identify exact TTL loopback echoes.
+
 ## 0.6.6 - 2026-06-01
 
 - Added Arduino RX idle-state diagnostics and all-zero reply warnings to distinguish real bus bytes from a stuck-low RX line.

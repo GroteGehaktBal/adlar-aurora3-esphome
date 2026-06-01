@@ -6,4 +6,5 @@
 - Targeted Seeed Studio XIAO ESP32C6 with ESP-IDF.
 - Added read sensors, diagnostics and conservative Home Assistant controls.
 - Added public-ready documentation, issue templates, license and repository metadata.
+- Converted user-facing documentation and Home Assistant entity names to English for international use.
 - Validated and compiled with ESPHome 2026.5.1.

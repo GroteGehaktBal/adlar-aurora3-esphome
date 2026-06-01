@@ -3,109 +3,120 @@
 ![ESPHome](https://img.shields.io/badge/ESPHome-2026.5%2B-2f7d95)
 ![Home Assistant](https://img.shields.io/badge/Home%20Assistant-ready-41bdf5)
 ![Hardware](https://img.shields.io/badge/hardware-Seeed%20XIAO%20ESP32--C6-6f42c1)
-![Status](https://img.shields.io/badge/status-compile--tested%2C%20hardware%20verify%20needed-d29922)
+![Status](https://img.shields.io/badge/status-compile--tested%2C%20hardware%20verification%20needed-d29922)
 ![License](https://img.shields.io/badge/license-MIT-2da44e)
 
-ESPHome-configuratie voor het uitlezen en beperkt besturen van een Adlår/Adlar Aurora III R290 warmtepomp via de JÅN-module en Modbus RTU over RS485.
+ESPHome configuration for monitoring and limited local control of an Adlår/Adlar Aurora III R290 heat pump through the JÅN module using Modbus RTU over RS485.
 
-Deze repository is bedoeld als een nette, herbruikbare basis voor Home Assistant-gebruikers die een Adlar Aurora III of verwante SolarEast/Sunrain R290-warmtepomp lokaal willen integreren zonder cloudafhankelijkheid.
+This repository is intended as a clean, reusable starting point for Home Assistant users who want a local, cloud-independent integration for an Adlar Aurora III or a related SolarEast/Sunrain R290 heat pump.
 
-> Status: de ESPHome-config is gevalideerd en succesvol gecompileerd voor de Seeed Studio XIAO ESP32C6. De registerset is gebaseerd op openbare Adlar/SolarEast/R290-communityconfiguraties. Hardwaregedrag moet per installatie voorzichtig worden getest.
+> Status: the ESPHome configuration has been validated and successfully compiled for the Seeed Studio XIAO ESP32C6. The register set is based on public Adlar/SolarEast/R290 community configurations. Real hardware behavior must still be verified carefully per installation.
 
-## Wat Dit Project Doet
+## Unofficial Project
 
-- Leest statusbits, foutbits, temperaturen, waterflow, compressorfrequentie, stroom en spanning uit.
-- Biedt beperkte bediening via Home Assistant: verwarmingssetpoint, koelingssetpoint, bedrijfsmodus, aan/uit en vermogensmodus.
-- Houdt risicovollere instellingen zoals stooklijnselectie standaard uitgeschakeld.
-- Gebruikt de native ESPHome API, OTA-updates en een eenvoudige lokale webinterface.
-- Neemt service-/installatieparameters bewust niet op als normale Home Assistant-bediening.
+This is an independent community project. It is not affiliated with, endorsed by, sponsored by, or supported by Adlår/Adlar or SolarEast. Product names are used only to identify compatible hardware.
+
+## What This Project Does
+
+- Reads status bits, fault bits, temperatures, water flow, compressor frequency, current and voltage.
+- Exposes limited Home Assistant controls: heating setpoint, cooling setpoint, operating mode, on/off and power mode.
+- Keeps riskier settings such as weather-compensation curve selection disabled by default.
+- Uses the native ESPHome API, OTA updates and a simple local web interface.
+- Deliberately avoids exposing installer/service parameters as ordinary Home Assistant controls.
 
 ## Hardware
 
-Getest doelplatform voor deze configuratie:
+Target hardware for this configuration:
 
 - Seeed Studio XIAO ESP32C6
-- 3.3V RS485-naar-TTL transceiver
-- Adlar/JÅN Modbus-aansluiting met `A`, `B` en `GND`
+- 3.3V RS485-to-TTL transceiver
+- Adlar/JÅN Modbus port with `A`, `B` and `GND`
 
-Gebruik geen 5V TTL-signaal rechtstreeks op de XIAO ESP32C6. De GPIO's zijn niet 5V tolerant.
+Do not feed a 5V TTL signal directly into the XIAO ESP32C6. Its GPIO pins are not 5V tolerant.
 
-## Snelle Start
+## Quick Start
 
-1. Clone deze repository of importeer de YAML in ESPHome.
-2. Kopieer `secrets.example.yaml` naar je eigen ESPHome `secrets.yaml`.
-3. Vul je WiFi-, API- en OTA-secrets in.
-4. Controleer de bedrading in [docs/wiring.md](docs/wiring.md).
-5. Compileer en flash `adlar_aurora3_xiao_esp32c6.yaml`.
-6. Test eerst alleen uitlezen met onder andere `Retour water temperatuur T6`, `Aanvoer water temperatuur T7`, `Water flow` en `Running status 1 raw`.
-7. Schakel pas daarna voorzichtig bediening in Home Assistant in.
+1. Clone this repository or import the YAML into ESPHome.
+2. Copy `secrets.example.yaml` to your own ESPHome `secrets.yaml`.
+3. Fill in your WiFi, API and OTA secrets.
+4. Check the wiring in [docs/wiring.md](docs/wiring.md).
+5. Compile and flash `adlar_aurora3_xiao_esp32c6.yaml`.
+6. Start with read-only monitoring. Watch `Return water temperature T6`, `Supply water temperature T7`, `Water flow` and `Running status 1 raw`.
+7. Only enable write controls in Home Assistant after read data is stable and plausible.
 
 ```bash
 esphome config adlar_aurora3_xiao_esp32c6.yaml
 esphome compile adlar_aurora3_xiao_esp32c6.yaml
 ```
 
-## Bedrading Kort
+## Wiring Summary
 
 | XIAO ESP32C6 | GPIO | RS485 TTL module |
 | --- | ---: | --- |
 | D6 / TX | GPIO16 | DI / TX-in |
 | D7 / RX | GPIO17 | RO / RX-out |
-| D2 | GPIO2 | DE en /RE samen, alleen bij handmatige direction modules |
-| 3V3 |  | VCC, bij 3.3V-module |
+| D2 | GPIO2 | DE and /RE tied together, only for manual-direction modules |
+| 3V3 |  | VCC, only for a 3.3V module |
 | GND |  | GND |
 
-| RS485 TTL module | JÅN Modbus-poort |
+| RS485 TTL module | JÅN Modbus port |
 | --- | --- |
 | A | A |
 | B | B |
 | GND | GND |
 
-Als je RS485-module automatische richting heeft, verwijder dan `flow_control_pin: D2` uit de YAML.
+If your RS485 module has automatic direction control, remove `flow_control_pin: D2` from the YAML.
 
-Meer details en een schema staan in [docs/wiring.md](docs/wiring.md).
+More detail and a diagram are available in [docs/wiring.md](docs/wiring.md).
 
-## Belangrijke Veiligheid
+## Important Safety Notes
 
-ESPHome werkt in deze configuratie als Modbus master/client. Sluit dit alleen direct op dezelfde bus aan als de JÅN-poort als Modbus slave/server bedoeld is, of test eerst uitsluitend uitlezen. Als de JÅN-module zelf ook actief als master op dezelfde RS485-bus praat, is er geen echte busarbitrage en kunnen telegrammen botsen.
+ESPHome acts as the Modbus master/client in this configuration. Connect it directly only if the JÅN port is intended to behave as a Modbus slave/server interface, or start with read-only monitoring. If the JÅN module itself is already acting as a master on the same RS485 bus, there is no real bus arbitration and frames can collide.
 
-De configuratie pollt daarom rustig: standaard elke 30 seconden met 250 ms command throttle. Verlaag deze intervallen niet voordat je de bus stabiel hebt getest.
+The configuration therefore polls gently: every 30 seconds by default with a 250 ms command throttle. Do not reduce those intervals until the bus has been proven stable.
 
-Zie [docs/troubleshooting.md](docs/troubleshooting.md) voor symptomen zoals CRC-fouten, geen respons, 10x verkeerde temperaturen of writes die niet blijven staan.
+See [docs/troubleshooting.md](docs/troubleshooting.md) for symptoms such as CRC errors, no response, temperatures that are off by a factor of 10, or write values that do not stick.
 
-## Repository-Inhoud
+## Repository Contents
 
-| Pad | Doel |
+| Path | Purpose |
 | --- | --- |
-| `adlar_aurora3_xiao_esp32c6.yaml` | Hoofdconfiguratie voor ESPHome |
-| `secrets.example.yaml` | Voorbeeld van benodigde secrets |
-| `docs/wiring.md` | Bedrading en RS485-aandachtspunten |
-| `docs/register-map.md` | Registeroverzicht, schaling en schrijfbare adressen |
-| `docs/troubleshooting.md` | Problemen oplossen en eerste testprocedure |
-| `CHANGELOG.md` | Wijzigingsgeschiedenis |
-| `CONTRIBUTING.md` | Richtlijnen voor issues, pull requests en hardware-testfeedback |
+| `adlar_aurora3_xiao_esp32c6.yaml` | Main ESPHome configuration |
+| `secrets.example.yaml` | Example secrets file |
+| `docs/wiring.md` | Wiring and RS485 notes |
+| `docs/register-map.md` | Register overview, scaling and writable addresses |
+| `docs/troubleshooting.md` | Troubleshooting and first-test procedure |
+| `docs/publication-notes.md` | Notes for publishing and keeping the project clearly unofficial |
+| `ROADMAP.md` | Possible future improvements |
+| `DISCLAIMER.md` | Unofficial project and safety disclaimer |
+| `CHANGELOG.md` | Change history |
+| `CONTRIBUTING.md` | Issue, pull request and hardware-test guidelines |
 
-## Aannames En Grenzen
+## Assumptions And Limits
 
-- De Aurora III gebruikt dezelfde Modbus RTU-registerlaag als de SolarEast/Sunrain R290 BLN/TC-serie.
-- Modbus: slave-id `1`, 9600 baud, 8 databits, geen parity, 1 stopbit.
-- Temperaturen zijn in deze config als hele graden verwerkt, omdat de gevonden Adlar/Home Assistant-config dat zo gebruikt. Als jouw waarden exact 10x te hoog binnenkomen, pas dan de temperatuurschaling aan.
-- De stooklijnselecties staan bewust `disabled_by_default: true`. Sommige registermaps noemen alleen curve 1-8, terwijl het gevonden Adlar-voorbeeld ook H/L-curves gebruikt.
-- Het verwarmingssetpoint is begrensd op 20-45 graden. Voor radiatoren kun je dat verhogen, maar doe dat bewust. Voor vloerverwarming is een te hoge watertemperatuur onwenselijk.
+- The Aurora III is assumed to use the same Modbus RTU register layer as the SolarEast/Sunrain R290 BLN/TC family.
+- Modbus defaults: slave ID `1`, 9600 baud, 8 data bits, no parity, 1 stop bit.
+- Temperatures are treated as whole degrees because the found Adlar/Home Assistant configuration does the same. If your values are exactly 10x too high, adjust temperature scaling.
+- Weather-compensation curve selects are deliberately `disabled_by_default: true`. Some register maps expose only curve 1-8, while the found Adlar example also uses H/L curve values.
+- The heating setpoint is limited to 20-45 °C. Raise this only if your heating system is designed for it.
 
-## Bronnen
+## Sources
 
-- [Adlår Aurora III Pro handleiding](https://www.support.adlar.com/wp-content/uploads/2025/08/250606-Aurora-III-Pro-R290-Gebruikershandleiding.pdf)
-- [Adlar/Home Assistant Modbus voorbeeld](https://github.com/rhjbruins/adlar_homeassistant)
-- [SolarEast/R290 Home Assistant integratie](https://github.com/CNC-Buddy/R290_heatpump)
-- [Seeed XIAO ESP32C6 pinmap](https://wiki.seeedstudio.com/xiao_esp32c6_getting_started/)
+- [Adlår Aurora III Pro manual](https://www.support.adlar.com/wp-content/uploads/2025/08/250606-Aurora-III-Pro-R290-Gebruikershandleiding.pdf)
+- [Adlar/Home Assistant Modbus example](https://github.com/rhjbruins/adlar_homeassistant)
+- [SolarEast/R290 Home Assistant integration](https://github.com/CNC-Buddy/R290_heatpump)
+- [Seeed XIAO ESP32C6 pin map](https://wiki.seeedstudio.com/xiao_esp32c6_getting_started/)
 - [ESPHome Modbus](https://esphome.io/components/modbus/)
 - [ESPHome Modbus Controller](https://esphome.io/components/modbus_controller/)
 
-## Meedoen
+## Contributing
 
-Hardware-testresultaten zijn heel welkom, vooral met exacte warmtepompvariant, JÅN-moduleversie, RS485-module, bekabeling en welke registers kloppen. Gebruik daarvoor de issue templates.
+Real hardware test reports are very welcome, especially with exact heat pump model, JÅN module details, RS485 transceiver type, wiring notes and which registers behave correctly. Please use the issue templates.
 
-## Licentie
+## Publishing Notes
 
-MIT. Zie [LICENSE](LICENSE).
+This repository is designed so it can later be made public: it uses original code and documentation, avoids vendor logos and copied manual text, and clearly marks itself as an unofficial community project. See [docs/publication-notes.md](docs/publication-notes.md).
+
+## License
+
+MIT. See [LICENSE](LICENSE).

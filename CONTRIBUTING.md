@@ -24,4 +24,4 @@ Contributions are welcome, especially real-world hardware test reports. This pro
 
 ## Naming
 
-The current Home Assistant entity names are Dutch because this project started with a Dutch Adlar Aurora III installation. An English variant or package split is welcome if it stays easy to maintain.
+User-facing names should stay in English so the project remains useful internationally. Product names such as Adlar, Adlår, Aurora III and JÅN may be used when needed to identify compatible hardware.

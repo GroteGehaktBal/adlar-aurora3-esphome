@@ -1,0 +1,29 @@
+name: Feature request
+description: Suggest a new feature, register, documentation page or Home Assistant improvement.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: feature
+    attributes:
+      label: Proposed feature
+      description: What would you like to add or improve?
+    validations:
+      required: true
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use case
+      description: Why is this useful for Adlar/SolarEast/R290 users?
+    validations:
+      required: true
+  - type: textarea
+    id: safety
+    attributes:
+      label: Safety considerations
+      description: Could this change write to the heat pump, alter operating mode, or expose installer/service settings?
+  - type: textarea
+    id: sources
+    attributes:
+      label: Sources or test evidence
+      description: Link register documentation, community examples or hardware test results if available.

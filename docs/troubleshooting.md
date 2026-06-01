@@ -41,10 +41,10 @@ Check:
 ## Suggested First Entities To Watch
 
 - `Running status 1 raw`
-- `Warmtepomp status tekst`
-- `Retour water temperatuur T6`
-- `Aanvoer water temperatuur T7`
+- `Heat pump status text`
+- `Return water temperature T6`
+- `Supply water temperature T7`
 - `Water flow`
-- `Compressor frequentie`
+- `Compressor frequency`
 
-Only after these behave sensibly should you test `Verwarmen watertemperatuur setpoint`.
+Only after these behave sensibly should you test `Heating water temperature setpoint`.

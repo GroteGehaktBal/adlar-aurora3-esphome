@@ -49,6 +49,17 @@ esphome config adlar_aurora3_xiao_esp32c6.yaml
 esphome compile adlar_aurora3_xiao_esp32c6.yaml
 ```
 
+## Bring-Up Firmware
+
+If the RS485 board TX/RX LEDs or the ESPHome web UI make it unclear which firmware is actually running, flash `adlar_aurora3_xiao_esp32c6_bringup.yaml` first. It exposes a clear `Firmware profile` text entity and sends only one Modbus input-register read per minute.
+
+```bash
+esphome config adlar_aurora3_xiao_esp32c6_bringup.yaml
+esphome compile adlar_aurora3_xiao_esp32c6_bringup.yaml
+```
+
+In the local web UI, the bring-up firmware should show `Firmware profile` with `bring-up 0.3.0 - 9600 8N2 - one input read per minute`. If old entity names such as `Circulation pump active` or `Controller power` still appear, the ESP was not flashed with this repository's current YAML.
+
 ## Wiring Summary
 
 | XIAO ESP32C6 | GPIO | XY-485 / automatic-direction RS485 module |
@@ -83,6 +94,7 @@ See [docs/troubleshooting.md](docs/troubleshooting.md) for symptoms such as CRC 
 | Path | Purpose |
 | --- | --- |
 | `adlar_aurora3_xiao_esp32c6.yaml` | Main ESPHome configuration |
+| `adlar_aurora3_xiao_esp32c6_bringup.yaml` | Minimal one-register-per-minute first-contact firmware |
 | `secrets.example.yaml` | Example secrets file |
 | `docs/wiring.md` | Wiring and RS485 notes |
 | `docs/register-map.md` | Register overview, scaling and writable addresses |

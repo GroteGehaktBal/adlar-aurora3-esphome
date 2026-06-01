@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.0 - 2026-06-01
+
+- Added a minimal bring-up firmware that exposes a visible firmware marker and sends only one Modbus read per minute.
+- Documented how to confirm that the expected firmware is actually running before debugging RS485 wiring.
+
 ## 0.2.0 - 2026-06-01
 
 - Switched the main ESPHome configuration to the Aurora III/Castra Aurora III protocol profile: 9600 8N2, input-register telemetry and holding-register controls.

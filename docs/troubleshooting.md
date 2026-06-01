@@ -6,7 +6,7 @@ Start with the ESP powered over USB and the heat pump/JÅN wiring connected with
 
 Check these first:
 
-1. Confirm the current firmware is the Aurora III profile: `9600` baud, `8N2`, input-register reads and slave ID `1`.
+1. Confirm the current firmware is really running. The bring-up firmware should show a `Firmware profile` entity with `bring-up 0.3.0 - 9600 8N2 - one input read per minute`.
 2. For an XY-485-style board, confirm XIAO `D6/TX` goes to module `RXD` and XIAO `D7/RX` goes to module `TXD`.
 3. Confirm `GND` is connected between the transceiver and JÅN port. If the board has an `E` terminal, verify with a multimeter whether `E` is common with TTL-side `GND/DNG`; if not, add a proper signal-ground connection.
 4. Swap RS485 `A` and `B` at one end only. Many RS485 boards and devices use opposite `A/B` naming.
@@ -22,6 +22,20 @@ Useful LED check for XY-485-style boards:
 - TX and RX activity but all values stay `NA`: check baud rate, slave ID, parity, stop bits and register assumptions.
 
 Do not use Home Assistant write controls until at least a few read-only sensors show plausible values.
+
+## Confirming The Flashed Firmware
+
+The local ESPHome web UI is served by the ESP itself. Entity names therefore tell you which firmware is actually running.
+
+If you flash `adlar_aurora3_xiao_esp32c6_bringup.yaml`, the web UI should show:
+
+- `Firmware profile`
+- `Bring-up system status bits`
+- `Bring-up status`
+
+If the web UI still shows old names such as `Circulation pump active`, `Controller power`, `Heat pump defrost` or `Compressor target frequency`, the board is still running an older configuration. In ESPHome Builder, open the device's YAML with `EDIT`, replace the entire file with the bring-up YAML, save, use `Clean build files`, then install again.
+
+The bring-up firmware intentionally sends only one Modbus request per minute. If the `RXD` LED blinks more often than that, an older or different firmware is still running.
 
 ## USB Port Disappears While Flashing
 

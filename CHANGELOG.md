@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.4 - 2026-06-01
+
+- Added a slow Arduino read-only Modbus slave/register scanner for harder first-contact tests.
+
 ## 0.6.3 - 2026-06-01
 
 - Changed the Arduino RS485 sketch from passive-only sniffing to a combined passive sniffer and slow active Modbus probe.

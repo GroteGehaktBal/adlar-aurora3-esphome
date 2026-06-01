@@ -125,7 +125,8 @@ See [docs/troubleshooting.md](docs/troubleshooting.md) for symptoms such as CRC 
 | `docs/5v-rs485-module-test.md` | Safe test procedure for 5V MAX485-style modules |
 | `docs/register-map.md` | Register overview, scaling and writable addresses |
 | `docs/troubleshooting.md` | Troubleshooting and first-test procedure |
-| `tools/arduino_rs485_sniffer/` | Arduino sketch for passive 5V RS485 receive testing |
+| `tools/arduino_rs485_sniffer/` | Arduino sketch for passive and active 5V RS485 receive testing |
+| `tools/arduino_rs485_slave_scan/` | Arduino sketch for a slow read-only Modbus slave/register scan |
 | `docs/publication-notes.md` | Notes for publishing and keeping the project clearly unofficial |
 | `ROADMAP.md` | Possible future improvements |
 | `DISCLAIMER.md` | Unofficial project and safety disclaimer |

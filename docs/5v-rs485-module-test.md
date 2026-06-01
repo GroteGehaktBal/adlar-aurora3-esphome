@@ -96,4 +96,18 @@ If only a single series resistor is available, do not treat it as a proper level
 - No bytes even at 5V in both A/B orientations: the issue is likely not just transceiver supply voltage.
 - ESPHome TX works but JÅN never replies: the bus may not accept a second Modbus master, the slave ID/register request may still be wrong, or the module direction/RS485 side is not working correctly.
 
+## Optional Slow Slave Scan
+
+If the main Arduino sketch sends probes but always prints `RX: no reply`, you can try the slower scanner in `tools/arduino_rs485_slave_scan`.
+
+It tries:
+
+- slave IDs `1` through `10`, plus `247` and `251`
+- input registers `0`, `1`, `38`, and `40`
+- holding registers `0`, `38`, and `2100`
+
+It is still read-only, but it sends many requests. Use it only while watching the heat pump/JÅN behavior, and stop the scan if anything becomes unstable.
+
+If the scanner completes a pass with `Valid replies in this pass: 0` in both A/B orientations, the remaining likely causes are physical bus wiring/topology, the RS485 board not driving/receiving correctly on the differential side, or the JÅN terminal not being the reachable Modbus slave bus expected by the public community examples.
+
 For a permanent ESP32 installation, prefer a true 3.3V RS485 transceiver such as an SP3485/MAX3485-based module, an isolated 3.3V RS485 module, or a proven external RS485 gateway.

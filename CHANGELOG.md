@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.0 - 2026-06-01
+
+- Added a passive RX-only sniffer firmware for checking whether the XIAO and RS485 transceiver can hear existing JÅN bus traffic.
+- Documented how to interpret `[uart_debug]` RX logs before continuing active Modbus polling tests.
+
 ## 0.3.1 - 2026-06-01
 
 - Updated bring-up firmware to probe both likely Aurora III Modbus slave IDs: `1` and `251`.

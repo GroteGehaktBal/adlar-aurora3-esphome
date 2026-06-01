@@ -23,6 +23,18 @@ Useful LED check for XY-485-style boards:
 
 Do not use Home Assistant write controls until at least a few read-only sensors show plausible values.
 
+## Passive Bus Sniffing
+
+If both slave `1` and slave `251` time out with the bring-up firmware, flash `adlar_aurora3_xiao_esp32c6_sniffer.yaml`.
+
+This sniffer profile does not transmit on RS485. It only listens on XIAO `D7/RX` at 9600 8N2 and writes raw received bytes to the ESPHome logs as `[uart_debug]` lines.
+
+Results:
+
+- `[uart_debug]` RX lines appear: the RS485 receive path works and the JÅN bus is active. Active Modbus failures are then more likely caused by bus ownership, timing or the request profile.
+- No `[uart_debug]` RX lines appear: check XIAO `D7/RX` to RS485 module `TXD`, module power, JÅN `GND` to TTL-side `GND/DNG`, and both A/B orientations.
+- RX lines appear only in one A/B orientation: keep that orientation for further tests.
+
 ## Confirming The Flashed Firmware
 
 The local ESPHome web UI is served by the ESP itself. Entity names therefore tell you which firmware is actually running.

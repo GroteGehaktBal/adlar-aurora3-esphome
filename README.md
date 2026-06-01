@@ -60,6 +60,12 @@ esphome compile adlar_aurora3_xiao_esp32c6_bringup.yaml
 
 In the local web UI, the bring-up firmware should show `Firmware profile` with `bring-up 0.3.1 - 9600 8N2 - slave 1 and 251 probe`. If old entity names such as `Circulation pump active` or `Controller power` still appear, the ESP was not flashed with this repository's current YAML.
 
+## Passive Sniffer Firmware
+
+If the bring-up firmware sends requests but gets no replies, flash `adlar_aurora3_xiao_esp32c6_sniffer.yaml`. It does not transmit anything on RS485. It only listens on XIAO `D7/RX` at 9600 8N2 and logs raw bytes as `[uart_debug]` lines.
+
+Use this to confirm whether the XIAO and RS485 module can hear the existing JÅN/heat-pump bus traffic before debugging active Modbus polling.
+
 ## Wiring Summary
 
 | XIAO ESP32C6 | GPIO | XY-485 / automatic-direction RS485 module |
@@ -95,6 +101,7 @@ See [docs/troubleshooting.md](docs/troubleshooting.md) for symptoms such as CRC 
 | --- | --- |
 | `adlar_aurora3_xiao_esp32c6.yaml` | Main ESPHome configuration |
 | `adlar_aurora3_xiao_esp32c6_bringup.yaml` | Minimal one-register-per-minute first-contact firmware |
+| `adlar_aurora3_xiao_esp32c6_sniffer.yaml` | Passive RS485 receive-only sniffer firmware |
 | `secrets.example.yaml` | Example secrets file |
 | `docs/wiring.md` | Wiring and RS485 notes |
 | `docs/register-map.md` | Register overview, scaling and writable addresses |

@@ -1,0 +1,131 @@
+---
+# Passive RS485 sniffer firmware for the Adlar Aurora III / Castra Aurora III Pro
+# JÅN module Modbus terminals.
+#
+# Purpose:
+# - Do not transmit anything onto the RS485 bus.
+# - Listen for existing JÅN/heat-pump traffic at 9600 8N2.
+# - Confirm whether the XIAO + RS485 module can actually see bus bytes.
+
+substitutions:
+  name: adlar-aurora3
+  friendly_name: Adlar Aurora III
+  firmware_profile: "sniffer 0.4.0 - passive RX only - 9600 8N2"
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+  comment: "Adlar Aurora III JÅN RS485 passive sniffer profile"
+  project:
+    name: grotegehaktbal.adlar_aurora3_esphome
+    version: "0.4.0-sniffer"
+
+dashboard_import:
+  package_import_url: github://GroteGehaktBal/adlar-aurora3-esphome/adlar_aurora3_xiao_esp32c6_sniffer.yaml@main
+  import_full_config: true
+
+esp32:
+  board: seeed_xiao_esp32c6
+  variant: esp32c6
+  framework:
+    type: esp-idf
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  min_auth_mode: WPA2
+  ap:
+    ssid: "${friendly_name} fallback"
+    password: !secret fallback_ap_password
+
+captive_portal:
+
+api:
+  encryption:
+    key: !secret api_encryption_key
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+logger:
+  level: DEBUG
+  baud_rate: 0
+
+web_server:
+  port: 80
+  version: 3
+  sorting_groups:
+    - id: group_diagnostics
+      name: Diagnostics
+      sorting_weight: 10
+
+button:
+  - platform: restart
+    name: "Restart ESP"
+    entity_category: diagnostic
+
+uart:
+  id: uart_rs485_sniffer
+  rx_pin: D7
+  baud_rate: 9600
+  data_bits: 8
+  parity: NONE
+  stop_bits: 2
+  rx_buffer_size: 512
+  debug:
+    direction: RX
+    dummy_receiver: true
+    after:
+      bytes: 64
+      timeout: 100ms
+
+binary_sensor:
+  - platform: status
+    name: "ESP online"
+    entity_category: diagnostic
+
+sensor:
+  - platform: wifi_signal
+    name: "ESP WiFi signal"
+    update_interval: 60s
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: uptime
+    name: "ESP uptime"
+    update_interval: 60s
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+
+text_sensor:
+  - platform: wifi_info
+    ip_address:
+      name: "ESP IP"
+      entity_category: diagnostic
+      web_server:
+        sorting_group_id: group_diagnostics
+    ssid:
+      name: "ESP WiFi SSID"
+      entity_category: diagnostic
+      web_server:
+        sorting_group_id: group_diagnostics
+
+  - platform: template
+    name: "Firmware profile"
+    entity_category: diagnostic
+    update_interval: 60s
+    lambda: |-
+      return std::string("${firmware_profile}");
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: template
+    name: "Sniffer status"
+    update_interval: 60s
+    lambda: |-
+      return std::string("Passive RX only. Check ESPHome logs for [uart_debug] RX bytes.");
+    web_server:
+      sorting_group_id: group_diagnostics

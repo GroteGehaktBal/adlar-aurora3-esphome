@@ -12,8 +12,8 @@ flowchart LR
   RS485["XY-485 / automatic-direction RS485 TTL transceiver"]
   JAN["JÅN Modbus port"]
 
-  XIAO -- "D6 / GPIO16 / TX -> RXD" --> RS485
-  RS485 -- "TXD -> D7 / GPIO17 / RX" --> XIAO
+  XIAO -- "D6 / GPIO16 / TX -> TXD" --> RS485
+  RS485 -- "RXD -> D7 / GPIO17 / RX" --> XIAO
   XIAO -- "3V3 + GND" --- RS485
   RS485 -- "A+" --- JAN
   RS485 -- "B-" --- JAN

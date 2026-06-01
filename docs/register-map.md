@@ -71,6 +71,29 @@ This project uses zero-based Modbus register addresses, matching ESPHome and Hom
 
 The Aurora III profile treats temperature registers as tenths of a degree. For example, raw `215` is exposed as `21.5 °C`. Writable temperature controls multiply the Home Assistant value by `10` before writing the register.
 
+## Observed Live Bus Capture
+
+These values were captured from one JÅN/Aurora III installation with the passive Arduino analyzer. They confirm a live 9600 8N2 Modbus RTU bus on slave `1`. The meanings are still provisional unless they match the register table above and stay plausible across more installations.
+
+| Function | Address | Captured raw value | Interpreted value | Notes |
+| ---: | ---: | ---: | --- | --- |
+| `4` | `43` | `222` | `22.2 °C` | Matches outlet/supply water temperature scaling |
+| `4` | `50` | `228` | `22.8 °C` | Matches ambient temperature scaling |
+| `4` | `63` | `5` | `5 %` | Pump/PWM-style feedback candidate |
+| `4` | `64` | `0` | `0.0 m³/h` | Water-flow register candidate |
+| `4` | `66` | `180` | `18.0 °C` | Cooling curve/set value candidate |
+| `4` | `67` | `180` | `18.0 °C` | Heating curve/set value candidate |
+| `4` | `73` | `0` | raw `0` | Observed, meaning not confirmed |
+| `4` | `74` | `226` | `226 V` | AC voltage candidate |
+| `4` | `79` | `0` | `0 Hz` | Compressor actual frequency candidate |
+| `4` | `83` | `0` | raw `0` | Observed, meaning not confirmed |
+| `4` | `90` | `0` | raw `0` | Fault bitfield candidate |
+| `4` | `92` | `0` | raw `0` | Observed, meaning not confirmed |
+| `4` | `97` | `0` | raw `0` | Protection/fault bitfield candidate |
+| `3` | `2100` | `2` | raw `2` | Current/target HVAC mode candidate |
+| `3` | `2107` | `300` | `30.0 °C` | Zone 1 heating setpoint/current JÅN value candidate |
+| `3` | `6035` | `1` | raw `1` | Observed holding register outside the public control set |
+
 ## Hardware Feedback Wanted
 
 If you test this on real hardware, please open a hardware test report with:

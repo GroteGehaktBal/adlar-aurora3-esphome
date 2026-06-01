@@ -3,14 +3,14 @@
 ![ESPHome](https://img.shields.io/badge/ESPHome-2026.5%2B-2f7d95)
 ![Home Assistant](https://img.shields.io/badge/Home%20Assistant-ready-41bdf5)
 ![Hardware](https://img.shields.io/badge/hardware-Seeed%20XIAO%20ESP32--C6-6f42c1)
-![Status](https://img.shields.io/badge/status-compile--tested%2C%20hardware%20verification%20needed-d29922)
+![Status](https://img.shields.io/badge/status-passive%20bus%20verified%2C%20active%20control%20experimental-d29922)
 ![License](https://img.shields.io/badge/license-MIT-2da44e)
 
 ESPHome configuration for monitoring and limited local control of an Adlår/Adlar Aurora III R290 heat pump through the JÅN module using Modbus RTU over RS485.
 
 This repository is intended as a clean, reusable starting point for Home Assistant users who want a local, cloud-independent integration for an Adlar Aurora III or a related SolarEast/Sunrain R290 heat pump.
 
-> Status: the ESPHome configuration has been validated and successfully compiled for the Seeed Studio XIAO ESP32C6. The current profile follows the public Aurora III / Castra Aurora III community mapping: 9600 baud, 8N2, input registers for telemetry, holding registers for controls.
+> Status: the ESPHome configurations have been validated and successfully compiled for the Seeed Studio XIAO ESP32C6. Live JÅN bus traffic has been decoded with the Arduino passive analyzer at 9600 baud, 8N2, slave `1`. The passive ESPHome monitor is the safest first Home Assistant profile; active polling/control remains experimental on an already-active JÅN bus.
 
 ## Unofficial Project
 
@@ -44,14 +44,16 @@ If you need to test whether a MAX485-style board requires 5V, see [docs/5v-rs485
 2. Copy `secrets.example.yaml` to your own ESPHome `secrets.yaml`.
 3. Fill in your WiFi, API and OTA secrets.
 4. Check the wiring in [docs/wiring.md](docs/wiring.md).
-5. Compile and flash `adlar_aurora3_xiao_esp32c6.yaml`.
-6. Start with read-only monitoring. Watch `Inlet water temperature`, `Outlet water temperature`, `Water flow`, `System status bits` and `Heat pump status text`.
-7. Only enable write controls in Home Assistant after read data is stable and plausible.
+5. For a first safe install on an existing JÅN bus, compile and flash `adlar_aurora3_xiao_esp32c6_passive_monitor.yaml`.
+6. Watch `Passive valid Modbus frames`, `Passive published values`, `Passive ambient temperature`, `Passive outlet water temperature`, `Passive AC voltage`, and `Passive zone 1 heating setpoint current`.
+7. Only move to active polling or write controls after passive data is stable and plausible.
 
 ```bash
-esphome config adlar_aurora3_xiao_esp32c6.yaml
-esphome compile adlar_aurora3_xiao_esp32c6.yaml
+esphome config adlar_aurora3_xiao_esp32c6_passive_monitor.yaml
+esphome compile adlar_aurora3_xiao_esp32c6_passive_monitor.yaml
 ```
+
+The older active profile is still available as `adlar_aurora3_xiao_esp32c6.yaml`, but it transmits Modbus requests. Use it only after you understand the bus-ownership notes below.
 
 ## Bring-Up Firmware
 
@@ -69,6 +71,12 @@ In the local web UI, the bring-up firmware should show `Firmware profile` with `
 If the bring-up firmware sends requests but gets no replies, flash `adlar_aurora3_xiao_esp32c6_sniffer.yaml`. It does not intentionally transmit anything on RS485. It keeps XIAO `D6/TX` at UART idle-high for automatic-direction boards, listens on `D7/RX` at 9600 8N2, and logs raw bytes as `[uart_debug]` lines.
 
 Use this to confirm whether the XIAO and RS485 module can hear the existing JÅN/heat-pump bus traffic before debugging active Modbus polling.
+
+## Passive ESPHome Monitor
+
+After the Arduino passive analyzer sees valid request/response pairs, flash `adlar_aurora3_xiao_esp32c6_passive_monitor.yaml`. This profile also listens only: it does not create a Modbus controller and does not transmit requests. It pairs existing JÅN read requests with their responses and publishes the observed values as Home Assistant entities.
+
+This is currently the best profile for side-by-side use with the JÅN module because the JÅN/internal controller already owns the Modbus conversation.
 
 ## UART Loopback Test
 
@@ -105,9 +113,11 @@ More detail and a diagram are available in [docs/wiring.md](docs/wiring.md).
 
 ## Important Safety Notes
 
-ESPHome acts as an additional Modbus client/master in this configuration. RS485 supports multiple electrical nodes on the same pair, but Modbus RTU has no real bus arbitration. Public Aurora III community setups work by tapping the same JÅN/internal bus and polling gently.
+The passive monitor does not act as a Modbus client/master. It listens to the existing JÅN/internal Modbus conversation and is therefore the safest profile for side-by-side monitoring.
 
-The configuration therefore polls gently: every 60 seconds by default with a 750 ms command throttle and 500 ms send wait time. Do not reduce those intervals until the bus has been proven stable.
+The active ESPHome profile does act as an additional Modbus client/master. RS485 supports multiple electrical nodes on the same pair, but Modbus RTU has no real bus arbitration. Public Aurora III community setups work by tapping the same JÅN/internal bus and polling gently.
+
+The active configuration therefore polls gently: every 60 seconds by default with a 750 ms command throttle and 500 ms send wait time. Do not reduce those intervals until the bus has been proven stable.
 
 See [docs/troubleshooting.md](docs/troubleshooting.md) for symptoms such as CRC errors, no response, temperatures that are off by a factor of 10, or write values that do not stick.
 
@@ -116,6 +126,7 @@ See [docs/troubleshooting.md](docs/troubleshooting.md) for symptoms such as CRC 
 | Path | Purpose |
 | --- | --- |
 | `adlar_aurora3_xiao_esp32c6.yaml` | Main ESPHome configuration |
+| `adlar_aurora3_xiao_esp32c6_passive_monitor.yaml` | Passive ESPHome monitor that publishes observed JÅN bus values without transmitting |
 | `adlar_aurora3_xiao_esp32c6_bringup.yaml` | Minimal one-register-per-minute first-contact firmware |
 | `adlar_aurora3_xiao_esp32c6_sniffer.yaml` | Passive RS485 receive-only sniffer firmware |
 | `adlar_aurora3_xiao_esp32c6_uart_loopback.yaml` | Local XIAO D6/D7 UART loopback test firmware |

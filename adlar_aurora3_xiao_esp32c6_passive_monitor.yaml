@@ -1,0 +1,519 @@
+---
+# Passive ESPHome monitor for an Adlar Aurora III / JÅN RS485 bus.
+#
+# This profile does not transmit Modbus requests. It listens to the existing
+# JÅN/heat-pump Modbus traffic, pairs read requests with responses, and publishes
+# values for registers observed during hardware bring-up.
+#
+# Tested XY-485 TTL wiring:
+#   XIAO D6/TX -> RS485 module TXD
+#   XIAO D7/RX -> RS485 module RXD
+#   XIAO 3V3   -> RS485 module VCC
+#   XIAO GND   -> RS485 module GND/DNG
+#
+# RS485 side:
+#   RS485 A+   -> JÅN A
+#   RS485 B-   -> JÅN B
+#   RS485 GND  -> JÅN GND
+
+substitutions:
+  name: adlar-aurora3
+  friendly_name: Adlar Aurora III
+  firmware_profile: "passive-monitor 0.7.0 - listens only"
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+  comment: "Passive Adlar Aurora III JÅN RS485 Modbus monitor on Seeed Studio XIAO ESP32C6"
+  project:
+    name: grotegehaktbal.adlar_aurora3_esphome
+    version: "0.7.0-passive-monitor"
+
+dashboard_import:
+  package_import_url: github://GroteGehaktBal/adlar-aurora3-esphome/adlar_aurora3_xiao_esp32c6_passive_monitor.yaml@main
+  import_full_config: true
+
+esp32:
+  board: seeed_xiao_esp32c6
+  variant: esp32c6
+  framework:
+    type: esp-idf
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  min_auth_mode: WPA2
+  ap:
+    ssid: "${friendly_name} fallback"
+    password: !secret fallback_ap_password
+
+captive_portal:
+
+api:
+  encryption:
+    key: !secret api_encryption_key
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+logger:
+  level: INFO
+  baud_rate: 0
+
+web_server:
+  port: 80
+  version: 3
+  sorting_groups:
+    - id: group_passive
+      name: Passive Monitor
+      sorting_weight: 5
+    - id: group_temperatures
+      name: Temperatures
+      sorting_weight: 10
+    - id: group_hydraulics
+      name: Hydraulics
+      sorting_weight: 20
+    - id: group_power
+      name: Power
+      sorting_weight: 30
+    - id: group_status
+      name: Status
+      sorting_weight: 40
+    - id: group_diagnostics
+      name: Diagnostics
+      sorting_weight: 90
+
+button:
+  - platform: restart
+    name: "Restart ESP"
+    entity_category: diagnostic
+
+globals:
+  - id: last_request_slave
+    type: uint8_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: last_request_function
+    type: uint8_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: last_request_address
+    type: uint16_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: last_request_count
+    type: uint16_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: passive_valid_frames
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: passive_published_values
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+
+uart:
+  id: uart_rs485_passive
+  tx_pin: D6
+  rx_pin: D7
+  baud_rate: 9600
+  data_bits: 8
+  parity: NONE
+  stop_bits: 2
+  rx_buffer_size: 1024
+  debug:
+    direction: RX
+    dummy_receiver: true
+    after:
+      timeout: 6ms
+    sequence:
+      - lambda: |-
+          if (bytes.size() < 5) {
+            return;
+          }
+
+          auto crc16 = [](const std::vector<uint8_t> &data, size_t length) -> uint16_t {
+            uint16_t crc = 0xFFFF;
+            for (size_t pos = 0; pos < length; pos++) {
+              crc ^= (uint16_t) data[pos];
+              for (uint8_t i = 0; i < 8; i++) {
+                if ((crc & 0x0001) != 0) {
+                  crc >>= 1;
+                  crc ^= 0xA001;
+                } else {
+                  crc >>= 1;
+                }
+              }
+            }
+            return crc;
+          };
+
+          auto word_at = [](const std::vector<uint8_t> &data, size_t index) -> uint16_t {
+            return ((uint16_t) data[index] << 8) | data[index + 1];
+          };
+
+          const uint16_t expected_crc = crc16(bytes, bytes.size() - 2);
+          const uint16_t actual_crc = (uint16_t) bytes[bytes.size() - 2] |
+                                      ((uint16_t) bytes[bytes.size() - 1] << 8);
+          if (expected_crc != actual_crc) {
+            return;
+          }
+
+          id(passive_valid_frames) += 1;
+
+          const uint8_t slave = bytes[0];
+          const uint8_t function = bytes[1];
+          char message[96];
+
+          if ((function == 0x03 || function == 0x04) && bytes.size() == 8) {
+            id(last_request_slave) = slave;
+            id(last_request_function) = function;
+            id(last_request_address) = word_at(bytes, 2);
+            id(last_request_count) = word_at(bytes, 4);
+            snprintf(message, sizeof(message), "request slave %u fc %u addr %u count %u",
+                     slave, function, id(last_request_address), id(last_request_count));
+            id(passive_last_frame).publish_state(message);
+            return;
+          }
+
+          if ((function == 0x03 || function == 0x04) && bytes.size() >= 7) {
+            const uint8_t byte_count = bytes[2];
+            if (bytes.size() != (size_t) byte_count + 5) {
+              return;
+            }
+            if (slave != id(last_request_slave) ||
+                function != id(last_request_function) ||
+                id(last_request_count) != 1 ||
+                byte_count < 2) {
+              return;
+            }
+
+            const uint16_t address = id(last_request_address);
+            const uint16_t raw = word_at(bytes, 3);
+            const int16_t signed_raw = (int16_t) raw;
+            bool published = true;
+
+            if (function == 0x04) {
+              switch (address) {
+                case 40:
+                  id(passive_room_temperature).publish_state(signed_raw * 0.1f);
+                  break;
+                case 42:
+                  id(passive_inlet_water_temperature).publish_state(signed_raw * 0.1f);
+                  break;
+                case 43:
+                  id(passive_outlet_water_temperature).publish_state(signed_raw * 0.1f);
+                  break;
+                case 50:
+                  id(passive_ambient_temperature).publish_state(signed_raw * 0.1f);
+                  break;
+                case 63:
+                  id(passive_pump_pwm_feedback).publish_state(raw);
+                  break;
+                case 64:
+                  id(passive_water_flow).publish_state(raw * 0.1f);
+                  break;
+                case 66:
+                  id(passive_climate_curve_cooling_set).publish_state(signed_raw * 0.1f);
+                  break;
+                case 67:
+                  id(passive_climate_curve_heating_set).publish_state(signed_raw * 0.1f);
+                  break;
+                case 73:
+                  id(passive_observed_input_73_raw).publish_state(raw);
+                  break;
+                case 74:
+                  id(passive_ac_voltage).publish_state(raw);
+                  break;
+                case 79:
+                  id(passive_compressor_actual_frequency).publish_state(raw);
+                  break;
+                case 83:
+                  id(passive_observed_input_83_raw).publish_state(raw);
+                  break;
+                case 90:
+                  id(passive_error_e01_e16).publish_state(raw);
+                  break;
+                case 92:
+                  id(passive_observed_input_92_raw).publish_state(raw);
+                  break;
+                case 97:
+                  id(passive_error_p17_p32).publish_state(raw);
+                  break;
+                default:
+                  published = false;
+                  break;
+              }
+            } else if (function == 0x03) {
+              switch (address) {
+                case 2100:
+                  id(passive_hvac_mode_current).publish_state(raw);
+                  break;
+                case 2107:
+                  id(passive_zone1_heating_setpoint_current).publish_state(signed_raw * 0.1f);
+                  break;
+                case 6035:
+                  id(passive_observed_holding_6035_raw).publish_state(raw);
+                  break;
+                default:
+                  published = false;
+                  break;
+              }
+            }
+
+            snprintf(message, sizeof(message), "response slave %u fc %u addr %u raw %u",
+                     slave, function, address, raw);
+            id(passive_last_frame).publish_state(message);
+
+            if (published) {
+              id(passive_published_values) += 1;
+              snprintf(message, sizeof(message), "published addr %u raw %u", address, raw);
+              id(passive_status).publish_state(message);
+            }
+          }
+
+binary_sensor:
+  - platform: status
+    name: "ESP online"
+    entity_category: diagnostic
+
+sensor:
+  - platform: wifi_signal
+    name: "ESP WiFi signal"
+    update_interval: 60s
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: uptime
+    name: "ESP uptime"
+    update_interval: 60s
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: template
+    id: passive_valid_frame_count
+    name: "Passive valid Modbus frames"
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    lambda: |-
+      return id(passive_valid_frames);
+    update_interval: 30s
+    web_server:
+      sorting_group_id: group_passive
+
+  - platform: template
+    id: passive_published_value_count
+    name: "Passive published values"
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    lambda: |-
+      return id(passive_published_values);
+    update_interval: 30s
+    web_server:
+      sorting_group_id: group_passive
+
+  - platform: template
+    id: passive_room_temperature
+    name: "Passive room temperature"
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    web_server:
+      sorting_group_id: group_temperatures
+
+  - platform: template
+    id: passive_inlet_water_temperature
+    name: "Passive inlet water temperature"
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    web_server:
+      sorting_group_id: group_temperatures
+
+  - platform: template
+    id: passive_outlet_water_temperature
+    name: "Passive outlet water temperature"
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    web_server:
+      sorting_group_id: group_temperatures
+
+  - platform: template
+    id: passive_ambient_temperature
+    name: "Passive ambient temperature"
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    web_server:
+      sorting_group_id: group_temperatures
+
+  - platform: template
+    id: passive_pump_pwm_feedback
+    name: "Passive pump PWM feedback"
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    web_server:
+      sorting_group_id: group_hydraulics
+
+  - platform: template
+    id: passive_water_flow
+    name: "Passive water flow"
+    unit_of_measurement: "m³/h"
+    device_class: volume_flow_rate
+    state_class: measurement
+    accuracy_decimals: 1
+    web_server:
+      sorting_group_id: group_hydraulics
+
+  - platform: template
+    id: passive_climate_curve_cooling_set
+    name: "Passive climate curve cooling set"
+    unit_of_measurement: "°C"
+    device_class: temperature
+    accuracy_decimals: 1
+    web_server:
+      sorting_group_id: group_status
+
+  - platform: template
+    id: passive_climate_curve_heating_set
+    name: "Passive climate curve heating set"
+    unit_of_measurement: "°C"
+    device_class: temperature
+    accuracy_decimals: 1
+    web_server:
+      sorting_group_id: group_status
+
+  - platform: template
+    id: passive_ac_voltage
+    name: "Passive AC voltage"
+    unit_of_measurement: "V"
+    device_class: voltage
+    state_class: measurement
+    accuracy_decimals: 0
+    web_server:
+      sorting_group_id: group_power
+
+  - platform: template
+    id: passive_compressor_actual_frequency
+    name: "Passive compressor actual frequency"
+    unit_of_measurement: "Hz"
+    state_class: measurement
+    accuracy_decimals: 0
+    web_server:
+      sorting_group_id: group_status
+
+  - platform: template
+    id: passive_error_e01_e16
+    name: "Passive error E01-E16 raw"
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: template
+    id: passive_error_p17_p32
+    name: "Passive error P17-P32 raw"
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: template
+    id: passive_hvac_mode_current
+    name: "Passive HVAC mode current raw"
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_status
+
+  - platform: template
+    id: passive_zone1_heating_setpoint_current
+    name: "Passive zone 1 heating setpoint current"
+    unit_of_measurement: "°C"
+    device_class: temperature
+    accuracy_decimals: 1
+    web_server:
+      sorting_group_id: group_status
+
+  - platform: template
+    id: passive_observed_input_73_raw
+    name: "Passive observed input 73 raw"
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: template
+    id: passive_observed_input_83_raw
+    name: "Passive observed input 83 raw"
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: template
+    id: passive_observed_input_92_raw
+    name: "Passive observed input 92 raw"
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: template
+    id: passive_observed_holding_6035_raw
+    name: "Passive observed holding 6035 raw"
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: group_diagnostics
+
+text_sensor:
+  - platform: wifi_info
+    ip_address:
+      name: "ESP IP"
+      entity_category: diagnostic
+      web_server:
+        sorting_group_id: group_diagnostics
+    ssid:
+      name: "ESP WiFi SSID"
+      entity_category: diagnostic
+      web_server:
+        sorting_group_id: group_diagnostics
+
+  - platform: template
+    name: "Firmware profile"
+    entity_category: diagnostic
+    update_interval: 60s
+    lambda: |-
+      return std::string("${firmware_profile}");
+    web_server:
+      sorting_group_id: group_diagnostics
+
+  - platform: template
+    id: passive_status
+    name: "Passive monitor status"
+    update_interval: never
+    web_server:
+      sorting_group_id: group_passive
+
+  - platform: template
+    id: passive_last_frame
+    name: "Passive last Modbus frame"
+    update_interval: never
+    web_server:
+      sorting_group_id: group_passive

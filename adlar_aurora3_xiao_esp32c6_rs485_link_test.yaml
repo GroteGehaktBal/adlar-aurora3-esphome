@@ -8,7 +8,8 @@
 #
 # Test wiring:
 # - Keep the RS485 module connected to the XIAO:
-#   XIAO D6/TX -> module RXD, XIAO D7/RX -> module TXD, 3V3 -> VCC, GND -> GND/DNG.
+#   XIAO D6/TX -> module TXD, XIAO D7/RX -> module RXD, 3V3 -> VCC, GND -> GND/DNG
+#   for the tested XY-485 orientation.
 # - Disconnect the module A/B/GND wires from the JÅN module.
 # - Connect module A/B/GND to a known-good USB-RS485 adapter or a second RS485 transceiver.
 # - Use 9600 baud, 8 data bits, no parity, 2 stop bits on the other side.

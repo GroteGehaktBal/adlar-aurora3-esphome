@@ -71,8 +71,8 @@ For a Mega, use hardware `Serial1` instead if preferred:
 | --- | --- |
 | `5V` | `VCC` |
 | `GND` | `GND/DNG` |
-| `RX1` / pin `19` | `TXD` |
-| `TX1` / pin `18` | `RXD` |
+| `RX1` / pin `19` | `RXD` |
+| `TX1` / pin `18` | `TXD` |
 
 ## Option B: Test 5V Power With ESPHome And A Divider
 
@@ -84,13 +84,13 @@ Minimum safe wiring:
 | --- | --- |
 | Module `VCC` -> `5V` | From a dev board or Arduino 5V pin |
 | Module `GND/DNG` -> ESP `GND` | Grounds must be common |
-| ESP `D6/TX` -> module `RXD` | Usually safe to try direct; 3.3V may be high enough |
-| Module `TXD` -> voltage divider -> ESP `D7/RX` | Do not connect directly until measured safe |
+| ESP `D6/TX` -> module `TXD` | Tested XY-485 orientation; try the alternate orientation only if needed |
+| Module `RXD` -> voltage divider -> ESP `D7/RX` | Do not connect directly until measured safe |
 
 Example resistor divider:
 
 ```text
-module TXD --- 10k ---+--- ESP D7/RX
+module RXD --- 10k ---+--- ESP D7/RX
                       |
                      20k
                       |

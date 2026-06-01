@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.0 - 2026-06-01
+
+- Added a passive ESPHome monitor that publishes observed JÅN Modbus values without transmitting requests.
+- Documented the first confirmed live bus capture: 9600 8N2, slave `1`, valid function-code 3/4 request and response pairs.
+- Made the passive monitor the recommended first Home Assistant profile for side-by-side use with the existing JÅN controller.
+
 ## 0.6.8 - 2026-06-01
 
 - Added a passive Arduino Modbus frame analyzer for decoding existing JÅN bus traffic without transmitting.

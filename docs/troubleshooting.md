@@ -24,6 +24,17 @@ Useful LED check for XY-485-style boards:
 
 Do not use Home Assistant write controls until at least a few read-only sensors show plausible values.
 
+## Passive ESPHome Monitor
+
+If the Arduino passive analyzer prints valid request/response pairs, flash `adlar_aurora3_xiao_esp32c6_passive_monitor.yaml` next. This is the safest Home Assistant profile for an already-active JÅN bus because it listens only and publishes observed values.
+
+Expected signs:
+
+- `Firmware profile` shows `passive-monitor 0.7.0 - listens only`.
+- `Passive valid Modbus frames` increases.
+- `Passive published values` increases when known registers are observed.
+- `Passive ambient temperature`, `Passive outlet water temperature`, `Passive AC voltage`, or `Passive zone 1 heating setpoint current` become populated when the JÅN controller polls those registers.
+
 ## Passive Bus Sniffing
 
 If both slave `1` and slave `251` time out with the bring-up firmware, flash `adlar_aurora3_xiao_esp32c6_sniffer.yaml`.
@@ -33,7 +44,7 @@ This sniffer profile does not intentionally transmit on RS485. It keeps XIAO `D6
 Results:
 
 - `[uart_debug]` RX lines appear: the RS485 receive path works and the JÅN bus is active. Active Modbus failures are then more likely caused by bus ownership, timing or the request profile.
-- No `[uart_debug]` RX lines appear: check XIAO `D7/RX` to RS485 module `TXD`, module power, JÅN `GND` to TTL-side `GND/DNG`, and both A/B orientations.
+- No `[uart_debug]` RX lines appear: check XIAO `D7/RX` to RS485 module `RXD` for the tested XY-485 orientation, module power, JÅN `GND` to TTL-side `GND/DNG`, and both A/B orientations.
 - RX lines appear only in one A/B orientation: keep that orientation for further tests.
 
 ## UART Loopback Test
@@ -52,8 +63,8 @@ If loopback works, the XIAO pins and ESPHome UART configuration are good. Focus 
 
 With the sniffer firmware powered and the RS485 module connected, useful idle voltage checks are:
 
-- XIAO `D6` / module `RXD` to GND: should sit near `3.3V`.
-- Module `TXD` / XIAO `D7` to GND: should usually sit near `3.3V` when the RS485 receiver is idle.
+- XIAO `D6` / module `TXD` to GND: should sit near `3.3V`.
+- Module `RXD` / XIAO `D7` to GND: should usually sit near `3.3V` when the RS485 receiver is idle.
 - JÅN `GND`, module `DNG/GND`, and XIAO `GND`: should be continuous.
 
 ## RS485 Transceiver Link Test
@@ -62,7 +73,7 @@ If you have a known-good USB-RS485 adapter or a second RS485 module, test throug
 
 1. Power down or unplug the XIAO.
 2. Keep the RS485 module connected to the XIAO TTL side:
-   `D6/TX` to module `RXD`, `D7/RX` to module `TXD`, `3V3` to `VCC`, and `GND` to `GND/DNG`.
+   `D6/TX` to module `TXD`, `D7/RX` to module `RXD`, `3V3` to `VCC`, and `GND` to `GND/DNG` for the tested XY-485 orientation.
 3. Disconnect RS485 `A/B/GND` from the JÅN module.
 4. Connect module `A/B/GND` to a known-good USB-RS485 adapter or a second RS485 transceiver.
 5. Flash `adlar_aurora3_xiao_esp32c6_rs485_link_test.yaml`.

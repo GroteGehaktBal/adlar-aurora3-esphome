@@ -2,6 +2,12 @@
 # ESPHome configuration for an Adlar Aurora III / Adlar Castra Aurora III Pro
 # heat pump through the JÅN module RS485 Modbus RTU terminals.
 #
+# Legacy/reference profile:
+# For the tested shared JÅN bus, use
+# adlar_aurora3_xiao_esp32c6_active_sidecar.yaml instead. This older profile
+# uses ESPHome modbus_controller and is kept for comparison with community
+# mappings.
+#
 # This profile follows the Aurora III community mapping: 9600 8N2, input
 # registers for live telemetry, and holding registers for the limited controls.
 #

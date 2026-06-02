@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.3 - 2026-06-02
+
+- Treated optional water, buffer, domestic-hot-water, solar and total-leaving-water sentinel values such as `-30.0 °C` and `-50.0 °C` as unavailable in the active sidecar profile.
+- Clarified that `adlar_aurora3_xiao_esp32c6_active_sidecar.yaml` is the recommended full Home Assistant profile for the tested shared JÅN bus.
+
 ## 1.0.2 - 2026-06-02
 
 - Changed the active sidecar `Estimated electrical power` entity to report live electrical power directly in watts.

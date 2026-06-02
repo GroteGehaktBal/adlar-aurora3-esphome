@@ -32,7 +32,7 @@
 substitutions:
   name: adlar-aurora3
   friendly_name: Adlar Aurora III
-  firmware_profile: "active-sidecar 1.0.2 - live electrical watts"
+  firmware_profile: "active-sidecar 1.0.3 - clean optional sensors"
 
 esphome:
   name: ${name}
@@ -40,7 +40,7 @@ esphome:
   comment: "Active sidecar Modbus integration for Adlar Aurora III JÅN RS485"
   project:
     name: grotegehaktbal.adlar_aurora3_esphome
-    version: "1.0.2-active-sidecar"
+    version: "1.0.3-active-sidecar"
 
 dashboard_import:
   package_import_url: github://GroteGehaktBal/adlar-aurora3-esphome/adlar_aurora3_xiao_esp32c6_active_sidecar.yaml@main
@@ -316,6 +316,14 @@ uart:
               return signed_value * 0.1f;
             };
 
+            auto optional_water_temperature = [&](uint16_t value) -> float {
+              const int16_t signed_value = (int16_t) value;
+              if (signed_value <= -250) {
+                return NAN;
+              }
+              return optional_temperature(value);
+            };
+
             if (function == 0x04) {
               switch (address) {
                 case 1:
@@ -361,7 +369,7 @@ uart:
                   id(room_temperature).publish_state(((int16_t) raw) * 0.1f);
                   return true;
                 case 41:
-                  id(total_leaving_water_temperature).publish_state(((int16_t) raw) * 0.1f);
+                  id(total_leaving_water_temperature).publish_state(optional_water_temperature(raw));
                   return true;
                 case 42:
                   id(inlet_water_temperature).publish_state(((int16_t) raw) * 0.1f);
@@ -370,19 +378,19 @@ uart:
                   id(outlet_water_temperature).publish_state(((int16_t) raw) * 0.1f);
                   return true;
                 case 44:
-                  id(buffer_tank_upper_temperature).publish_state(optional_temperature(raw));
+                  id(buffer_tank_upper_temperature).publish_state(optional_water_temperature(raw));
                   return true;
                 case 45:
-                  id(buffer_tank_lower_temperature).publish_state(optional_temperature(raw));
+                  id(buffer_tank_lower_temperature).publish_state(optional_water_temperature(raw));
                   return true;
                 case 46:
-                  id(dhw_tank_temperature).publish_state(optional_temperature(raw));
+                  id(dhw_tank_temperature).publish_state(optional_water_temperature(raw));
                   return true;
                 case 47:
-                  id(zone2_mixing_station_temperature).publish_state(optional_temperature(raw));
+                  id(zone2_mixing_station_temperature).publish_state(optional_water_temperature(raw));
                   return true;
                 case 48:
-                  id(solar_water_heating_temperature).publish_state(optional_temperature(raw));
+                  id(solar_water_heating_temperature).publish_state(optional_water_temperature(raw));
                   return true;
                 case 49:
                   id(outdoor_unit_coil_temperature).publish_state(((int16_t) raw) * 0.1f);

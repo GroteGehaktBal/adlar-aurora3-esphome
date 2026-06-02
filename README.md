@@ -180,10 +180,10 @@ See [docs/troubleshooting.md](docs/troubleshooting.md) for symptoms such as CRC 
 
 | Path | Purpose |
 | --- | --- |
-| `adlar_aurora3_xiao_esp32c6.yaml` | Main ESPHome configuration |
+| `adlar_aurora3_xiao_esp32c6_active_sidecar.yaml` | Recommended full active sidecar profile with broad telemetry and guarded write controls |
+| `adlar_aurora3_xiao_esp32c6.yaml` | Legacy ESPHome `modbus_controller` profile; kept for reference, not recommended for the tested shared JÅN bus |
 | `adlar_aurora3_xiao_esp32c6_passive_monitor.yaml` | Passive ESPHome monitor that publishes observed JÅN bus values without transmitting |
 | `adlar_aurora3_xiao_esp32c6_active_probe.yaml` | Slow read-only active probe for cases where passive monitoring sees only responses |
-| `adlar_aurora3_xiao_esp32c6_active_sidecar.yaml` | Complete active sidecar profile with broad telemetry and guarded write controls |
 | `adlar_aurora3_xiao_esp32c6_bringup.yaml` | Minimal one-register-per-minute first-contact firmware |
 | `adlar_aurora3_xiao_esp32c6_sniffer.yaml` | Passive RS485 receive-only sniffer firmware |
 | `adlar_aurora3_xiao_esp32c6_uart_loopback.yaml` | Local XIAO D6/D7 UART loopback test firmware |

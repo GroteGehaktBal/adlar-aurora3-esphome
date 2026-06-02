@@ -38,14 +38,14 @@ This project uses zero-based Modbus register addresses, matching ESPHome and Hom
 | `38` | System status bits | `U_WORD` | raw | Source for oil return, defrost, anti-freezing and status text |
 | `39` | External heat request raw | `U_WORD` | raw | External demand diagnostic |
 | `40` | Room temperature | `S_WORD` | x0.1 °C | Room sensor value, if populated |
-| `41` | Total leaving water temperature | `S_WORD` | x0.1 °C | Overall leaving water sensor |
+| `41` | Total leaving water temperature | `S_WORD` | x0.1 °C | Overall leaving water sensor; implausible optional sentinels are exposed as unavailable |
 | `42` | Inlet water temperature | `S_WORD` | x0.1 °C | Water inlet/return |
 | `43` | Outlet water temperature | `S_WORD` | x0.1 °C | Water outlet/supply |
 | `44` | Buffer tank upper temperature | `S_WORD` | x0.1 °C | Optional sensor; implausible sentinels such as `-50.0 °C` are exposed as unavailable |
 | `45` | Buffer tank lower temperature | `S_WORD` | x0.1 °C | Optional sensor; implausible sentinels such as `-50.0 °C` are exposed as unavailable |
 | `46` | Domestic hot water (DHW/SWW) tank temperature | `S_WORD` | x0.1 °C | Optional sensor; unavailable if no DHW tank sensor is installed |
 | `47` | Zone 2 mixing station temperature | `S_WORD` | x0.1 °C | Optional zone 2 sensor; unavailable on many single-zone systems |
-| `48` | Solar water heating temperature | `S_WORD` | x0.1 °C | Optional solar input |
+| `48` | Solar water heating temperature | `S_WORD` | x0.1 °C | Optional solar input; implausible sentinels such as `-30.0 °C` are exposed as unavailable |
 | `49` | Outdoor unit coil temperature | `S_WORD` | x0.1 °C | Refrigerant/coil sensor |
 | `50` | Ambient temperature | `S_WORD` | x0.1 °C | Outdoor ambient |
 | `51` | EXV outlet temperature | `S_WORD` | x0.1 °C | Refrigerant circuit |
@@ -106,6 +106,8 @@ Derived power and COP entities are estimates. `Estimated electrical power` is ca
 ## Scaling Notes
 
 The Aurora III profile treats temperature registers as tenths of a degree. For example, raw `215` is exposed as `21.5 °C`. Writable temperature controls multiply the Home Assistant value by `10` before writing the register.
+
+Some optional water, buffer, solar and zone-2 sensors report negative sentinel values when the physical sensor or feature is not present. The active sidecar masks those impossible values as unavailable instead of publishing them as real temperatures.
 
 ## Observed Live Bus Capture
 

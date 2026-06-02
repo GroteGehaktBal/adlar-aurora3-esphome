@@ -58,7 +58,7 @@ Once the active probe gets replies, flash `adlar_aurora3_xiao_esp32c6_active_sid
 
 Expected signs:
 
-- `Firmware profile` shows `active-sidecar 1.0.0 - slow reads + guarded writes`.
+- `Firmware profile` starts with `active-sidecar`.
 - `Active sidecar read requests` increases.
 - `Active sidecar read replies` increases shortly after the requests.
 - `Active sidecar timeouts` stays near zero.

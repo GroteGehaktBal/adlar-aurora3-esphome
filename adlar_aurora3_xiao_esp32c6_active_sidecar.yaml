@@ -32,7 +32,7 @@
 substitutions:
   name: adlar-aurora3
   friendly_name: Adlar Aurora III
-  firmware_profile: "active-sidecar 1.0.3 - clean optional sensors"
+  firmware_profile: "active-sidecar 1.1.0 - power fix + tiered polling"
 
 esphome:
   name: ${name}
@@ -40,7 +40,7 @@ esphome:
   comment: "Active sidecar Modbus integration for Adlar Aurora III JÅN RS485"
   project:
     name: grotegehaktbal.adlar_aurora3_esphome
-    version: "1.0.3-active-sidecar"
+    version: "1.1.0-active-sidecar"
 
 dashboard_import:
   package_import_url: github://GroteGehaktBal/adlar-aurora3-esphome/adlar_aurora3_xiao_esp32c6_active_sidecar.yaml@main
@@ -56,6 +56,9 @@ wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
   min_auth_mode: WPA2
+  # Zwak signaal (~-80 dBm): geen modem-sleep en maximaal zendvermogen.
+  power_save_mode: none
+  output_power: 20dB
   ap:
     ssid: "${friendly_name} fallback"
     password: !secret fallback_ap_password
@@ -73,6 +76,9 @@ ota:
 logger:
   level: INFO
   baud_rate: 0
+time:
+  - platform: sntp
+    id: sntp_time
 
 web_server:
   port: 80
@@ -252,6 +258,18 @@ globals:
 
   - id: pending_write_value
     type: uint16_t
+    restore_value: no
+    initial_value: "0"
+  - id: static_read_index
+    type: uint8_t
+    restore_value: no
+    initial_value: "0"
+  - id: static_pass_active
+    type: bool
+    restore_value: no
+    initial_value: "false"
+  - id: last_static_pass_ms
+    type: uint32_t
     restore_value: no
     initial_value: "0"
 
@@ -649,7 +667,7 @@ uart:
           }
 
 interval:
-  - interval: 2s
+  - interval: 1.5s
     then:
       - lambda: |-
           if (!id(active_sidecar_enabled).state) {
@@ -689,17 +707,21 @@ interval:
             uint16_t address;
           };
 
-          const ReadRegister reads[] = {
+          // Statische configuratieregisters: 1x per uur is ruim voldoende.
+          const ReadRegister static_reads[] = {
             {0x04, 1},
             {0x04, 2},
             {0x04, 7},
-            {0x04, 9},
             {0x04, 12},
             {0x04, 13},
             {0x04, 14},
             {0x04, 15},
             {0x04, 30},
             {0x04, 31},
+          };
+          // Dynamische registers: elke pollingcyclus.
+          const ReadRegister dynamic_reads[] = {
+            {0x04, 9},
             {0x04, 35},
             {0x04, 38},
             {0x04, 39},
@@ -765,9 +787,26 @@ interval:
             is_write = true;
             id(pending_write_requested) = false;
           } else {
-            const size_t read_count = sizeof(reads) / sizeof(reads[0]);
-            const ReadRegister reg = reads[id(read_index) % read_count];
-            id(read_index) = (id(read_index) + 1) % read_count;
+            const size_t static_count = sizeof(static_reads) / sizeof(static_reads[0]);
+            const size_t dynamic_count = sizeof(dynamic_reads) / sizeof(dynamic_reads[0]);
+            // Start een statische pass bij boot en daarna elk uur.
+            if (!id(static_pass_active) &&
+                (id(last_static_pass_ms) == 0 || (uint32_t)(now - id(last_static_pass_ms)) >= 3600000UL)) {
+              id(static_pass_active) = true;
+              id(static_read_index) = 0;
+            }
+            ReadRegister reg = dynamic_reads[id(read_index) % dynamic_count];
+            if (id(static_pass_active)) {
+              reg = static_reads[id(static_read_index)];
+              id(static_read_index) += 1;
+              if (id(static_read_index) >= static_count) {
+                id(static_pass_active) = false;
+                id(static_read_index) = 0;
+                id(last_static_pass_ms) = now;
+              }
+            } else {
+              id(read_index) = (id(read_index) + 1) % dynamic_count;
+            }
             function = reg.function;
             address = reg.address;
             value = 1;
@@ -1658,13 +1697,31 @@ sensor:
     accuracy_decimals: 0
     update_interval: 10s
     lambda: |-
-      if (!isnan(id(ac_voltage).state) && !isnan(id(ac_current).state) && id(ac_voltage).state > 0.0f && id(ac_current).state > 0.0f) {
-        return id(ac_voltage).state * id(ac_current).state;
+      // V*A is schijnbaar vermogen; inverter-drive met PFC -> PF ~0.95.
+      // Kalibreer de factor als er ooit een echte kWh-meter naast ligt.
+      if (isnan(id(ac_voltage).state) || isnan(id(ac_current).state) || id(ac_voltage).state <= 0.0f) {
+        return NAN;
       }
-      return NAN;
+      if (id(ac_current).state <= 0.05f) {
+        return 0.0f;  // standby: 0 W publiceren i.p.v. unavailable
+      }
+      return id(ac_voltage).state * id(ac_current).state * 0.95f;
     web_server:
       sorting_group_id: group_power
 
+  - platform: total_daily_energy
+    name: "Estimated daily energy"
+    power_id: estimated_electrical_power
+    time_id: sntp_time
+    unit_of_measurement: "kWh"
+    accuracy_decimals: 2
+    device_class: energy
+    state_class: total_increasing
+    restore: true
+    filters:
+      - multiply: 0.001
+    web_server:
+      sorting_group_id: group_power
   - platform: template
     name: "Estimated COP"
     state_class: measurement

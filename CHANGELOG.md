@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.0 - 2026-07-14
+
+- `Estimated electrical power` now reports `0 W` when the unit is idle instead of becoming unavailable in Home Assistant, and applies an assumed power factor of `0.95` to the `V × A` estimate. Calibrate the factor against a real kWh meter when possible.
+- Added an `Estimated daily energy` sensor (kWh) backed by an SNTP time component, ready for the Home Assistant energy dashboard.
+- Set `power_save_mode: none` and `output_power: 20dB` for more stable WiFi on weak signal.
+- Split the Modbus read schedule into tiered polling: static configuration registers (`1`, `2`, `7`, `12`-`15`, `30`, `31`) are read once per hour, dynamic registers every cycle, and the polling interval was reduced from 2 s to 1.5 s. Quiet-window collision avoidance is unchanged.
+
 ## 1.0.3 - 2026-06-02
 
 - Treated optional water, buffer, domestic-hot-water, solar and total-leaving-water sentinel values such as `-30.0 °C` and `-50.0 °C` as unavailable in the active sidecar profile.

@@ -129,9 +129,11 @@ The writable `Zone 1 heating setpoint override` maps to holding register `2107`.
 
 ## Electrical Power
 
-The active sidecar exposes `Estimated electrical power` in watts. It is calculated from Modbus input registers `74` and `75` as `AC voltage × AC current`.
+The active sidecar exposes `Estimated electrical power` in watts. Since firmware `1.1.0` it is calculated from Modbus input registers `74` and `75` as `AC voltage × AC current × 0.95`, where `0.95` is an assumed power factor for the PFC-equipped inverter drive. When the unit is idle and `AC current` reads `0 A`, the sensor reports `0 W` instead of becoming unavailable, so Home Assistant history and statistics stay continuous.
 
-This is useful for live dashboards and trend monitoring, but it should be treated as an estimate unless it is verified against a dedicated kWh meter. Without a confirmed real-power register or power-factor value, `V × A` may be closer to apparent power than billing-grade wattage.
+Firmware `1.1.0` also adds an `Estimated daily energy` sensor (kWh, `total_daily_energy` backed by an SNTP time component) that can be used directly in the Home Assistant energy dashboard.
+
+This is useful for live dashboards and trend monitoring, but it should still be treated as an estimate unless it is verified against a dedicated kWh meter. The `0.95` power factor is an assumption; if you can compare against a real meter, calibrate the factor in the YAML.
 
 ## UART Loopback Test
 

@@ -8,6 +8,8 @@
   PV MAX (up to 65 °C) inputs, commissioning checks, and an example Home
   Assistant solar-surplus automation with hysteresis, delays, and safe recovery
   after Home Assistant or ESPHome restarts.
+- Select the XIAO ESP32-C6 external U.FL antenna during startup using Seeed's
+  onboard RF-switch sequence on GPIO3 and GPIO14.
 
 ## 1.1.0 - 2026-07-14
 

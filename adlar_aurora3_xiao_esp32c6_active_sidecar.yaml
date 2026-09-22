@@ -31,6 +31,10 @@
 #   Relay COM + NO  -> Intuis dry-contact input 1 / "heures creuses"
 # See docs/intuis-edel-pv-relay.md before connecting boiler-side wiring.
 #
+# External 2.4 GHz antenna:
+#   Attach it to the XIAO U.FL connector while the board is unpowered.
+#   GPIO3 and GPIO14 below control the onboard RF switch; do not reuse them.
+#
 # RS485 side:
 #   RS485 A+   -> JÅN A
 #   RS485 B-   -> JÅN B
@@ -45,6 +49,15 @@ esphome:
   name: ${name}
   friendly_name: ${friendly_name}
   comment: "Active sidecar Modbus integration for Adlar Aurora III JÅN RS485"
+  on_boot:
+    # GPIO outputs initialize at priority 800; select the external antenna before
+    # WiFi initializes at priority 250. See the Seeed XIAO ESP32-C6 RF-switch
+    # sequence: GPIO3 LOW, wait 100 ms, then GPIO14 HIGH.
+    priority: 700
+    then:
+      - output.turn_off: rf_switch_enable
+      - delay: 100ms
+      - output.turn_on: external_antenna_select
   project:
     name: grotegehaktbal.adlar_aurora3_esphome
     version: "1.1.0-active-sidecar"
@@ -83,6 +96,16 @@ ota:
 logger:
   level: INFO
   baud_rate: 0
+
+output:
+  - platform: gpio
+    id: rf_switch_enable
+    pin: GPIO3
+
+  - platform: gpio
+    id: external_antenna_select
+    pin: GPIO14
+
 time:
   - platform: sntp
     id: sntp_time

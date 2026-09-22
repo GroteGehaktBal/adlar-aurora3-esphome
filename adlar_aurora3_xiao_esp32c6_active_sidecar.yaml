@@ -24,6 +24,13 @@
 #   XIAO 3V3   -> RS485 module VCC
 #   XIAO GND   -> RS485 module GND/DNG
 #
+# Optional Intuis Edel PV ECO relay (3.3 V, high-level trigger):
+#   XIAO D1 / GPIO1 -> relay IN
+#   XIAO 3V3        -> relay VCC
+#   XIAO GND        -> relay GND
+#   Relay COM + NO  -> Intuis dry-contact input 1 / "heures creuses"
+# See docs/intuis-edel-pv-relay.md before connecting boiler-side wiring.
+#
 # RS485 side:
 #   RS485 A+   -> JÅN A
 #   RS485 B-   -> JÅN B
@@ -128,6 +135,17 @@ switch:
     optimistic: true
     restore_mode: RESTORE_DEFAULT_OFF
     entity_category: config
+    web_server:
+      sorting_group_id: group_controls
+
+  - platform: gpio
+    id: intuis_pv_eco_boost
+    name: "Intuis PV ECO boost"
+    icon: "mdi:solar-power"
+    pin: D1
+    # The specified relay module energizes when IN is HIGH.
+    # ALWAYS_OFF opens COM-NO after every boot or firmware restart.
+    restore_mode: ALWAYS_OFF
     web_server:
       sorting_group_id: group_controls
 

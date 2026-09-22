@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Added an active-high GPIO relay switch on XIAO `D1/GPIO1` for the Intuis Edel
+  dry-contact input 1 / PV ECO request, with a fail-safe `ALWAYS_OFF` boot state.
+- Documented relay and Intuis wiring, the separate PV ECO (up to 60 °C) and
+  PV MAX (up to 65 °C) inputs, commissioning checks, and an example Home
+  Assistant solar-surplus automation with hysteresis and delays.
+
 ## 1.1.0 - 2026-07-14
 
 - `Estimated electrical power` now reports `0 W` when the unit is idle instead of becoming unavailable in Home Assistant, and applies an assumed power factor of `0.95` to the `V × A` estimate. Calibrate the factor against a real kWh meter when possible.

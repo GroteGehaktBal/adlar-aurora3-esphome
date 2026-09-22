@@ -23,6 +23,8 @@ This is an independent community project. It is not affiliated with, endorsed by
 - Exposes limited Home Assistant controls for heating setpoint override, domestic hot water (DHW/SWW) setpoint, room setpoint, HVAC mode, DHW/SWW mode and zone control.
 - Keeps all write controls behind an explicit `Enable write controls` switch.
 - Uses the native ESPHome API, OTA updates and a simple local web interface.
+- Optionally controls an Intuis Edel PV ECO dry-contact input through a 3.3 V
+  high-level relay on XIAO `D1/GPIO1`.
 - Deliberately avoids exposing installer/service parameters as ordinary Home Assistant controls.
 
 ## Hardware
@@ -168,6 +170,20 @@ The default YAML is configured for automatic-direction RS485 modules. If you use
 
 More detail and a diagram are available in [docs/wiring.md](docs/wiring.md).
 
+### Optional Intuis Edel PV ECO relay
+
+The active sidecar profile exposes `Intuis PV ECO boost` on XIAO `D1/GPIO1` for
+a 3.3 V, high-level-trigger relay module. Connect XIAO `3V3`, `D1`, and `GND` to
+relay `VCC`, `IN`, and `GND`; connect only relay `COM` and `NO` across Intuis
+dry-contact input 1 (`heures creuses`) after removing its factory jumper.
+
+This input requests PV ECO, which is limited to 60 °C. The Intuis PV MAX input
+up to 65 °C is a separate input 2 and needs a second relay channel. Never switch
+the water heater's mains supply and never apply a voltage to either Intuis dry
+contact input. See [the Intuis relay guide](docs/intuis-edel-pv-relay.md) for the
+complete wiring, commissioning checks, and a Home Assistant solar-surplus
+automation example.
+
 ## Important Safety Notes
 
 The passive monitor does not act as a Modbus client/master. It listens to the existing JÅN/internal Modbus conversation and is therefore the safest profile for side-by-side monitoring.
@@ -192,6 +208,7 @@ See [docs/troubleshooting.md](docs/troubleshooting.md) for symptoms such as CRC 
 | `adlar_aurora3_xiao_esp32c6_rs485_link_test.yaml` | RS485 transceiver test firmware for a USB-RS485 adapter or second transceiver |
 | `secrets.example.yaml` | Example secrets file |
 | `docs/wiring.md` | Wiring and RS485 notes |
+| `docs/intuis-edel-pv-relay.md` | Optional Intuis Edel PV ECO dry-contact relay wiring and Home Assistant example |
 | `docs/5v-rs485-module-test.md` | Safe test procedure for 5V MAX485-style modules |
 | `docs/register-map.md` | Register overview, scaling and writable addresses |
 | `docs/troubleshooting.md` | Troubleshooting and first-test procedure |

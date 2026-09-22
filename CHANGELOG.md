@@ -6,7 +6,8 @@
   dry-contact input 1 / PV ECO request, with a fail-safe `ALWAYS_OFF` boot state.
 - Documented relay and Intuis wiring, the separate PV ECO (up to 60 °C) and
   PV MAX (up to 65 °C) inputs, commissioning checks, and an example Home
-  Assistant solar-surplus automation with hysteresis and delays.
+  Assistant solar-surplus automation with hysteresis, delays, and safe recovery
+  after Home Assistant or ESPHome restarts.
 
 ## 1.1.0 - 2026-07-14
 

@@ -90,7 +90,10 @@ and closes `COM-NO`.
 The following example assumes the P1 entity reports grid power in watts, with
 negative values for export. Replace the entity IDs and thresholds to match the
 actual meter. The two thresholds provide hysteresis, while the `for` periods
-prevent short solar transients from toggling the request.
+prevent short solar transients from toggling the request. The third automation
+re-evaluates sustained export after Home Assistant starts or the ESPHome relay
+returns from `unavailable`; this is necessary because a numeric-state trigger
+only fires when its threshold is crossed.
 
 ```yaml
 automation:
@@ -115,12 +118,51 @@ automation:
       - action: switch.turn_off
         target:
           entity_id: switch.intuis_pv_eco_boost
+
+  - alias: "Intuis PV ECO - recover after restart"
+    mode: restart
+    triggers:
+      - trigger: homeassistant
+        event: start
+      - trigger: state
+        entity_id: switch.intuis_pv_eco_boost
+        from:
+          - "unknown"
+          - "unavailable"
+        to: "off"
+    actions:
+      - wait_template: >-
+          {{ has_value('sensor.p1_grid_power') and
+             has_value('switch.intuis_pv_eco_boost') }}
+        timeout: "00:05:00"
+        continue_on_timeout: false
+      - condition: numeric_state
+        entity_id: sensor.p1_grid_power
+        below: -700
+      - wait_for_trigger:
+          - trigger: template
+            value_template: >-
+              {{ not has_value('sensor.p1_grid_power') or
+                 not has_value('switch.intuis_pv_eco_boost') or
+                 states('sensor.p1_grid_power') | float >= -700 }}
+        timeout: "00:10:00"
+        continue_on_timeout: true
+      - condition: template
+        value_template: "{{ not wait.completed }}"
+      - action: switch.turn_on
+        target:
+          entity_id: switch.intuis_pv_eco_boost
 ```
 
 If the P1 sensor reports export as a positive value, reverse the comparisons.
 The thresholds are examples, not equipment limits. Account for other household
 loads and confirm that the Intuis internal controller remains responsible for
 compressor timing, temperature limits, and all safety functions.
+
+The relay deliberately remains `ALWAYS_OFF` in ESPHome. Restoring its previous
+on-state in firmware would make a reboot automatically request heat without
+first checking whether solar export still exists; the recovery automation above
+performs that check instead.
 
 ## References
 
